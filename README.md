@@ -109,8 +109,11 @@ YouTube's developer policies allow storing public comment data for at most 30 ca
 - Every stored comment carries a `rules_version` (set in `classify.py`; bump it whenever you change a rule or word list).
   Comments tagged before versioning show as "pre-versioning". `episode_summary.csv` has a `rules_versions` column and the run
   log warns when tags come from more than one version, so compare episodes tagged under the same rules.
-- **Both focus.** A Both comment (names Maria and the guest) also gets a `focus`: Maria, Guest or Joint, from a rough rule fitted
-  to 34 hand-labelled comments (about 74% agreement, optimistic because it was tuned on them). It does not change the tag.
+- **Both focus.** A Both comment (names Maria and the guest) also gets a `focus`: Maria, Guest or Joint. Each sentence is credited to
+  the guest (guest named), to Maria (named, or "you/your") or split when it has both, and a she/her sentence goes to whoever
+  was credited last; more than half of the words decides, an exact tie is Joint. Checked on 34 hand-labelled comments: about 74%
+  agreement (optimistic, it was tuned on them; the previous count-based rule scored 38% against the same labels once "who is it
+  mostly about" was the question). It does not change the tag.
   The main gap counts Both toward both sides, which cancels out of the gap (same as leaving Both out). The extra
   "sensitivity" line in the verdict assigns focused Both comments to the side they favour (`gap_focus`); if the two agree,
   the result does not depend on how Both is handled.
@@ -141,6 +144,9 @@ YouTube's developer policies allow storing public comment data for at most 30 ca
   "Мария, пригласи Опру Уинфри") and tallies it per episode. It is rule-based: runs of capitalised words minus cue words, Maria's
   names and the current guest; an all-lower-case comment is read only when it says "invite/have/bring X on". Each name counts once
   per comment, "Serena" is merged into "Serena Williams" when only one such name exists, and Russian endings are folded together.
+  Ordinary words are filtered out three ways: single letters and contractions ("A", "I'd") never count; a lone capitalised word that
+  opens a sentence ("Notice", "Compare") counts only if two or more comments name it; and a word that the episode's other comments
+  mostly write in lower case is an ordinary word, not a name. Anything still slipping through goes into `NAME_STOP` in `classify.py`.
   Cross-language spellings go in `name_aliases.csv` (variant,name). Output: `guest_requests.csv` (one row per episode and name,
   with this episode's count, the running total up to that episode and the overall rank), `guest_requests_table.csv` (names down,
   episodes across, plus a total), a picture of the top 10 (`guest_requests_table.png`), `requested_top` / `requests_total` /
@@ -154,11 +160,17 @@ YouTube's developer policies allow storing public comment data for at most 30 ca
   that matches everywhere is a common word or another person), very short aliases, episodes where no alias matched at all, guests
   named far less than the typical episode, and the episode's top words (a fan nickname that is not yet an alias shows up there).
   It only sees comments within the 28-day window.
-- **Address vs discussion.** Every Maria, Guest and Both comment also gets a `mode`: **address** (15 words or fewer, thank/praise or
-  second-person wording, no she/her/he/they: "Thanks Maria!", "Zoe you were amazing") or **discussion** (everything else). The verdict
+- **Address vs discussion.** Every Maria, Guest and Both comment also gets a `mode`: **address** (talks TO the person), **discussion** (talks
+  ABOUT them) or, for some Both comments, **mixed**. Each tag has its own rule, because hand-labelled samples showed one rule did not
+  fit all: for **Maria**, any second-person or thank/praise wording (any length), or a bare greeting/name of 6 words or fewer;
+  for the **guest**, the older stricter rule (15 words or fewer, thank/praise wording, no she/her/he/they), since "you" and "thank
+  you" in a comment naming only the guest are mostly aimed at Maria; for **Both**, sentence by sentence: **mixed** when at least a
+  quarter of the words thank/address Maria and another sentence discusses the guest (a short thank-you tail stays discussion).
+  Mixed counts as address for Maria and as discussion for the guest. Agreement with the hand labels: Maria 84% (was 64%), Guest
+  87% (about the same as always answering "discussion"), Both 71% (was 53%); tuned on those samples, so optimistic. The verdict
   adds a line for the gap among discussion comments only, a depth-weighted line (share of all words written about Maria minus
   about the guest, `gap_words`), and `episode_summary.csv` shows each side's address share. It is a rough rule: the Maria / Guest / Both
-  samples from `sample_neither.py` have a `your_mode` column so you can check it. Unnamed (she/her) and Host are split so the
+  samples from `sample_neither.py` have `your_label`, `your_mode` and `notes` columns so you can check it. Unnamed (she/her) and Host are split so the
   extreme-case line only gives the guest the she/her comments.
 - **Alias suggestions.** The pipeline looks in each episode's comments for words that may be another way of naming the guest: a
   **spelling variant** (1-2 edits from an alias or the guest's name, used by 3+ comments, e.g. "ahsley") or a **distinctive word**
