@@ -7,8 +7,9 @@ Only comments whose text is still stored (under 28 days old) can be sampled. The
 (no usernames), so it is written to a file and never printed to the log; in GitHub Actions it is a short-lived
 artifact. Delete it after reading.
 
-For Maria, Guest and Both samples there is an extra column, your_mode. Fill your_label with who the comment is really about
-(or "ok" if the tag is right) and your_mode with "address" (talks TO her: thanks, praise, "you") or "discussion" (talks ABOUT her).
+Columns to fill in: your_label (who/what the comment is really about, or "ok" if the tag is right) and notes (the word or phrase
+that made you decide, e.g. "she = guest", "Masha = Maria"). Maria, Guest and Both samples also have your_mode: "address" (talks TO
+the person: thanks, praise, "you"), "discussion" (talks ABOUT them) or "mixed" (does both, e.g. "I loved Hannah's story. Thanks Maria!").
 """
 import argparse
 import csv
@@ -29,10 +30,10 @@ def main():
                          ORDER BY random() LIMIT ?""", (args.about, args.n))
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        extra = ["your_mode"] if args.about in ("Maria", "Guest", "Both") else []   # address / discussion, to check the rule
-        w.writerow(["video_id", "guest", "likes", "compound", "text", "your_label"] + extra)
+        extra = ["your_mode"] if args.about in ("Maria", "Guest", "Both") else []   # address / discussion / mixed, to check the rule
+        w.writerow(["video_id", "guest", "likes", "compound", "text", "your_label"] + extra + ["notes"])
         for r in rows:
-            w.writerow([r["video_id"], r["guest"], r["likes"], round(r["compound"], 3), r["text"], ""] + [""] * len(extra))
+            w.writerow([r["video_id"], r["guest"], r["likes"], round(r["compound"], 3), r["text"], ""] + [""] * (len(extra) + 1))
     print(f"Wrote {len(rows)} sampled {args.about} comments to {args.out} (text not shown in the log)")
 
 
