@@ -401,7 +401,7 @@ def set_output(name, value):
             f.write(f"{name}={value}\n")
 
 
-BUILD = "2026-10-10.5"
+BUILD = "2026-10-13.2"
 
 
 def check_build():
