@@ -28,7 +28,7 @@ import pandas as pd
 import nltk
 import classify
 
-BUILD = "2026-10-10.5"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-13.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -130,9 +130,11 @@ def per_episode(df, min_named=10):
         eng = _engagement(d, mar, gst)
         md = d["mode"] if "mode" in d else pd.Series(None, index=d.index, dtype=object)
         wd = pd.to_numeric(d["words"], errors="coerce") if "words" in d else pd.Series(np.nan, index=d.index)
-        disc_m, disc_g = mar & (md == "discussion"), gst & (md == "discussion")
-        eng.update(maria_address_share=(md[mar] == "address").mean() if mar.any() and md[mar].notna().any() else np.nan,
-                   guest_address_share=(md[gst] == "address").mean() if gst.any() and md[gst].notna().any() else np.nan,
+        # "mixed" (a Both comment that thanks/addresses Maria and discusses the guest) is address for Maria and discussion for the guest
+        md_m, md_g = md.replace({"mixed": "address"}), md.replace({"mixed": "discussion"})
+        disc_m, disc_g = mar & (md_m == "discussion"), gst & (md_g == "discussion")
+        eng.update(maria_address_share=(md_m[mar] == "address").mean() if mar.any() and md[mar].notna().any() else np.nan,
+                   guest_address_share=(md_g[gst] == "address").mean() if gst.any() and md[gst].notna().any() else np.nan,
                    gap_discussion=disc_m.mean() - disc_g.mean() if md.notna().any() else np.nan,
                    gap_words=(wd[mar].sum() - wd[gst].sum()) / wd.sum() if wd.notna().any() and wd.sum() > 0 else np.nan)
         eng["keywords"] = _kw_text(_col(d, "keywords").iloc[0])
