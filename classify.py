@@ -25,7 +25,7 @@ import unicodedata
 
 import numpy as np
 
-BUILD = "2026-10-10.5"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-13.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 
 
 def _strip(t):
@@ -144,7 +144,10 @@ REQUEST_RX = re.compile(
     r"\bnext guest\b|\bnext\W*(pls|plz|please)?\W*$|^\W*next (episode|video)\b|\bnext (episode|video)\W{0,3}(with|featuring|ft|guest|please|pls|plz)\b|"
     r"\b(have|bring|invite|get|want|wish|hope|wanna|make|do)\b.{0,40}\bnext (episode|video)\b|^\W*next\b|\bwe need\b.{0,30}\b(on|interview|podcast)\b|\bneed\b.{1,25}\b(podcast|interview)\b|"
     r"\bwhen (are|will) you\b|\bwould love (it )?if you\b|\bwould be cool to see\b|\bhope to see you (collab|interview)\w*|"
-    r"\binterview with\b|\u043f\u0440\u0438\u0433\u043b\u0430\u0441\w*|\u043f\u0440\u0438\u0433\u043b\u0430\u0441\u0438\w*|\u043f\u043e\u0437\u043e\u0432\w*|"
+    r"\binterview with\b|\byou should (have|bring|invite|interview|get)\b|\bguesting\b|\bwaiting for\b.{1,30}\bon your\b|"
+    r"\b(love|like|want|wish|hope|would|wanna|dream)\b.{0,20}\b(see|watch|hear)\b.{0,15}\byou\b.{0,15}\binterview\w*|"
+    r"\bfuture guests?\b.{0,40}\b(would|should|could|suggest\w*|idea|love|see|have)\b|^\W*podcast with (?!(great|amazing|such|so|the|all|these|many|good|incredible|wonderful|awesome|best|inspiring|a|an|your|her|his)\b)[a-z]|"
+    r"\u043f\u0440\u0438\u0433\u043b\u0430\u0441\w*|\u043f\u0440\u0438\u0433\u043b\u0430\u0441\u0438\w*|\u043f\u043e\u0437\u043e\u0432\w*|"
     r"\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0443\u0438|\u0441\u0445\u043e\u0434\u0438|\u0445\u043e\u0447\u0443 \u0443\u0432\u0438\u0434\u0435\u0442\u044c|\u0436\u0434\u0435\u043c")
 SHOW_RX = re.compile(
     r"\b(shows?|podcasts?|episodes?|interviews?|interviewed|conversations?|series|channel|youtube|videos?|subscri\w+|listen\w*|"
@@ -165,7 +168,7 @@ REACT_RX = re.compile(
 
 # Bump this whenever a rule, word list or alias logic below changes in a way that can change a tag. It is stored with
 # every comment so you can tell which rules produced each tag (older comments whose text is purged keep their old version).
-RULES_VERSION = "2026-10-10.4"
+RULES_VERSION = "2026-10-13.1"
 
 CATEGORIES = ["Maria", "Guest", "Both", "Work", "Show", "Request", "Pair", "Unnamed", "Host", "Reaction", "Topic", "Noise", "Neither"]
 
@@ -279,6 +282,14 @@ great amazing and but also need want request suggestion ps sir ms mrs mr dr on t
 do does did is are was were be been not no just really very more most some any one two next time ever again too still more
 \u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430 \u043f\u0440\u0438\u0433\u043b\u0430\u0441\u0438 \u043f\u0440\u0438\u0433\u043b\u0430\u0441\u0438\u0442\u0435 \u043f\u0440\u0438\u0433\u043b\u0430\u0448\u0430\u0439 \u043f\u0440\u0438\u0433\u043b\u0430\u0448\u0430\u0439\u0442\u0435 \u043f\u043e\u0437\u043e\u0432\u0438 \u043f\u043e\u0437\u043e\u0432\u0438\u0442\u0435 \u0445\u043e\u0447\u0443 \u043f\u0440\u0438\u0432\u0435\u0442 \u0437\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435 \u0441\u043f\u0430\u0441\u0438\u0431\u043e \u043c\u0430\u0440\u0438\u044f \u043c\u0430\u0448\u0430 \u0432\u044b \u044f \u043c\u044b \u0430 \u0438 \u043d\u043e \u0434\u043b\u044f \u0431\u044b\u043b\u043e
 """.split())
+NAME_STOP |= {_strip(w) for w in """
+notice compare compared consider imagine try seeing today tonight here there then also again maybe sometime someday soon
+power fan fans big new subscriber subscribers best better greatest first second third last future past dream idea
+philippines india russia ukraine america usa canada england brazil brasil italy france spain germany
+wta atp tennis feminist feminism boa noite
+тогда лучший лучшая феминистка феминизм сильная личность обалденная теннисный подкаст пожалуйста спасибо также еще ещё
+""".split()}
+NAME_STOP |= {_strip(w) for w in "она он они её ее его это тоже так".split()}
 PRONOUNS = set("her him them someone anyone somebody everyone more others".split())
 
 
@@ -291,18 +302,58 @@ def _name_key(name):
     return " ".join(toks)
 
 
-def _names_in(text, skip):
+CONTRACTION_RX = re.compile(r"(i|you|we|they|he|she|it|that|there|who|what|let)['\u2019](d|ll|ve|m|re|s)")
+
+
+def _starts_sentence(text, i):
+    before = text[:i]
+    return not before.strip() or re.search(r"[.!?\u2026:\n]\s*$", before) is not None
+
+
+def common_words(texts):
+    """Words that are ordinary words, not names: seen in lower case in 2+ comments and more often than capitalised mid-sentence.
+    Pass the comments that are NOT requests (requests are full of names typed in lower case)."""
+    from collections import Counter
+    lo, cap = Counter(), Counter()
+    for t in texts:
+        for m in re.finditer(r"[^\W\d_][\w'\u2019\-]*", str(t)):
+            w = m.group()
+            k = _strip(re.sub(r"['\u2019]s$", "", w))
+            if w.islower():
+                lo[k] += 1
+            elif w[0].isupper() and not _starts_sentence(str(t), m.start()):
+                cap[k] += 1
+    return {k for k, n in lo.items() if n >= 2 and n > cap[k]}
+
+
+def _names_in(text, skip, common=frozenset(), weak=None):
+    """Names asked for in one comment. A lone capitalised Latin word opening a sentence is only a weak candidate: it goes into
+    `weak` (if given) instead of the result, and requested_names keeps it only when 2+ comments name it."""
     letters = [ch for ch in text if ch.isalpha()]
     upper_share = sum(ch.isupper() for ch in letters) / len(letters) if letters else 0
     found = []
-    for run in CAP_RUN.findall(text):
-        toks = [re.sub(r"['\u2019]s$", "", t) for t in run.split()]
-        while toks and (_strip(toks[0]) in NAME_STOP or _strip(toks[0]) in skip or MARIA_RX.fullmatch(_strip(toks[0]))):
+
+    def junk(tok):                    # not part of a name: cue word, Maria, the guest, a single letter, "I'd", an ordinary word
+        s = _strip(tok)
+        return (s in NAME_STOP or s in skip or s in common or MARIA_RX.fullmatch(s) is not None
+                or len(re.sub(r"\W", "", s)) <= 1 or CONTRACTION_RX.fullmatch(s) is not None)
+
+    for m in CAP_RUN.finditer(text):
+        toks = [re.sub(r"['\u2019]s$", "", t) for t in m.group().split()]
+        first_kept = True
+        while toks and junk(toks[0]):
             toks.pop(0)
-        while toks and (_strip(toks[-1]) in NAME_STOP or _strip(toks[-1]) in skip or MARIA_RX.fullmatch(_strip(toks[-1]))):
+            first_kept = False
+        while toks and junk(toks[-1]):
             toks.pop()
-        if toks and len(toks) <= 3 and not (upper_share > 0.7 and len(toks) == 1 and len(toks[0]) <= 3):
-            found.append(" ".join(toks))
+        if not toks or len(toks) > 3 or (upper_share > 0.7 and len(toks) == 1 and len(toks[0]) <= 3):
+            continue
+        # A lone capitalised Latin word that opens a sentence says little ("Notice", "Compare"): every sentence starts with one.
+        if len(toks) == 1 and first_kept and re.fullmatch(r"[A-Za-z\u00c0-\u00ff'\u2019\-]+", toks[0]) and _starts_sentence(text, m.start()):
+            if weak is not None:
+                weak.append(toks[0])
+            continue
+        found.append(" ".join(toks))
     if not found and text == text.lower():
         m = LOWER_ASK.search(_strip(text))
         if m:
@@ -360,9 +411,19 @@ def requested_names(df, top=15):
     skip = {t for a in str(df["guest_aliases"].iloc[0]).split("|") for t in re.findall(r"\w+", _strip(a))}
     if "guest" in df and isinstance(df["guest"].iloc[0], str):
         skip |= set(re.findall(r"\w+", _strip(df["guest"].iloc[0])))
-    counts = {}
+    common = common_words(df.loc[df["about"] != "Request", "comment"])
+    per_comment, weak_counts = [], {}
     for t in req["comment"]:
-        names = {_name_key(n): n for n in _names_in(t, skip)}
+        weak = []
+        names = {_name_key(n): n for n in _names_in(t, skip, common, weak)}
+        weak = {_name_key(w): w for w in weak}
+        per_comment.append((names, weak))
+        for k in weak:
+            weak_counts[k] = weak_counts.get(k, 0) + 1
+    counts = {}
+    for names, weak in per_comment:
+        names = dict(names)
+        names.update({k: w for k, w in weak.items() if weak_counts[k] >= 2})   # a sentence-opening single word counts only if 2+ comments use it
         out["named"] += bool(names)
         for n in names.values():
             counts[n] = counts.get(n, 0) + 1
@@ -372,28 +433,60 @@ def requested_names(df, top=15):
 
 
 # --- Address vs discussion (Maria / Guest / Both comments) ---------------------------------------------------------------
-# A comment that names Maria is often just talking TO her ("Thanks Maria!", "Great job, Maria"). "address" = short (15 words or
-# fewer), second-person or thank/praise wording, and no she/her/he/they; every other Maria/Guest/Both comment is "discussion".
-# A rough rule: check it against your own labels (the sampler has a your_mode column). Same rule for the guest's name.
+# "address" = talking TO the person ("Thanks Maria!", "Zoe you were amazing"); "discussion" = talking ABOUT them. Hand-labelled
+# samples showed the two sides need different rules, so each tag has its own:
+#   Maria  address if there is ANY second-person or thank/praise wording (any length: "Maria, you have proved..."), or if it is a
+#          bare greeting / name with emoji (6 words or fewer, no is/was/love/so...: "Hi Maria", "Mami sharapova", "Maria🥹").
+#          Everything else is discussion.
+#   Guest  the old rule: 15 words or fewer, second-person or thank/praise wording, no she/her/he/they. "you" and "thank you" in a
+#          comment that names only the guest are mostly aimed at Maria ("Thank you for bringing her on"), so a looser rule would
+#          mislabel them; address to the guest is rare (about 1 in 7) and mostly bare names.
+#   Both   split by sentence. A sentence with thank/praise wording addresses Maria; if another sentence discusses the guest, the
+#          comment is "mixed" when at least a quarter of its words address Maria (e.g. "I loved Hannah's story. Thank you Maria! Great
+#          job on this one."), and plain "discussion" when the thanks is only a short tail. Mixed counts as address for Maria and as
+#          discussion for the guest (analyze_youtube.per_episode). Address only (no guest sentence) is "address"; no address is "discussion".
+# A rough rule, tuned on small hand-labelled samples: re-check against your own labels (the sampler has a your_mode column).
 ADDRESS_RX = re.compile(r"\b(you|your|youre|you're|u|ur|thank|thanks|thankyou|congrat\w*|bravo|well done|great job|good job|love you|"
                         r"proud of|miss you|keep it up|keep going)\b|"
                         r"\u0432\u044b|\u0432\u0430\u043c|\u0432\u0430\u0441|\u0432\u0430\u043c\u0438|\u0442\u0435\u0431\u044f|\u0442\u0435\u0431\u0435|\u0441\u043f\u0430\u0441\u0438\u0431\u043e|"
                         r"\u043f\u043e\u0437\u0434\u0440\u0430\u0432\u043b\u044f\w*|\u043c\u043e\u043b\u043e\u0434\u0435\u0446")
 THIRD_RX = re.compile(r"\b(she|her|hers|he|him|his|they|them|their)\b")
+STATE_RX = re.compile(r"\b(is|was|are|were|has|had|did|does|looks?|should|super|love\w*|like\w*|best|so|such|really|great|awesome|gorgeous|funny)\b")
+SENT_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
-def _mode_one(text, about):
+def _sentences(v):
+    return [s for s in SENT_SPLIT.split(v) if s.strip()]
+
+
+def _mode_one(text, about, grx=None):
     if about not in ("Maria", "Guest", "Both"):
         return None
     v = variants(text)[0]
-    if n_words(text) <= 15 and ADDRESS_RX.search(v) and not THIRD_RX.search(v):
+    if about == "Guest":
+        return "address" if n_words(text) <= 15 and ADDRESS_RX.search(v) and not THIRD_RX.search(v) else "discussion"
+    if about == "Maria":
+        if ADDRESS_RX.search(v):
+            return "address"
+        if n_words(text) <= 6 and not STATE_RX.search(v) and not re.search(r"\d", v):
+            return "address"
+        return "discussion"
+    # Both: sentence by sentence
+    sents = _sentences(v)
+    addr = [s for s in sents if ADDRESS_RX.search(s)]
+    if not addr:
+        return "discussion"
+    guest_sent = [s for s in sents if s not in addr and ((grx is not None and _any(grx, variants(s))) or SHE_RX.search(s))]
+    if not guest_sent:
         return "address"
-    return "discussion"
+    share = sum(len(s.split()) for s in addr) / max(1, sum(len(s.split()) for s in sents))
+    return "mixed" if share >= 0.25 else "discussion"   # a short thank-you tail on a comment about the guest stays "discussion"
 
 
 def mode_all(df, about):
-    """'address' / 'discussion' for Maria, Guest and Both comments; None for every other tag."""
-    return np.array([_mode_one(t, ab) for t, ab in zip(df["comment"], about)], dtype=object)
+    """'address' / 'discussion' (and 'mixed' for some Both comments) for Maria, Guest and Both comments; None for every other tag."""
+    rx = {v: alias_regex(a) for v, a in df.drop_duplicates("video_id")[["video_id", "guest_aliases"]].values} if "guest_aliases" in df else {}
+    return np.array([_mode_one(t, ab, rx.get(v)) for v, t, ab in zip(df["video_id"], df["comment"], about)], dtype=object)
 
 
 # --- Alias suggestions --------------------------------------------------------------------------------------------------
@@ -479,25 +572,41 @@ def flags_all(df, about):
 
 
 # --- Focus of a "Both" comment -------------------------------------------------------------------------------
-# A Both comment names Maria and the guest, but is often really about one of them ("Maria, great questions... with Zoe").
-# Rough rule fitted to 34 hand-labelled Both comments (74% agreement; optimistic because it was tuned on them):
-#   Guest : the guest is named more often than Maria and "she/her" appears 3+ times
-#   Maria : 100+ words and either 3+ host words (interview, questions, host...) or the guest is not named more than Maria
-#   Joint : everything else (mostly short "thanks Maria, great chat with X" comments)
-HOST_RX = re.compile(r"\b(host|hosting|interviewer|interview|questions?|guided|asked|asking|listen\w*|podcast|episode|subscri\w+|series)\b")
+# A Both comment names Maria and the guest, but is often really about one of them ("I loved Hannah's story... thanks Maria!").
+# Word-weighted rule: every sentence is credited to the guest (guest named), to Maria (Maria named, or "you/your") or split
+# when it has both; a sentence with only she/her goes to whoever was credited last. Whoever gets more than half of those words is the
+# focus; an exact tie (or no words) is "Joint". Checked on 34 hand-labelled Both comments: 74% agreement (tuned on them, so
+# optimistic). The old rule (guest/Maria counts and host words) agreed on 38% once the labels counted who a comment is mostly about.
 SHE_RX = re.compile(r"\b(she|her|hers)\b")
+YOU_RX = re.compile(r"\b(you|your|youre|ur)\b")
 
 
 def _focus_one(text, grx, about):
     if about != "Both":
         return None
-    v = variants(text)[0]
-    m = len(MARIA_RX.findall(v))
-    g = len(grx.findall(v)) if grx else 0
-    she, host, words = len(SHE_RX.findall(v)), len(HOST_RX.findall(v)), len(v.split())
-    if g >= m + 1 and she >= 3:
+    gw = mw = 0.0
+    last = None
+    for s in _sentences(variants(text)[0]):
+        n = len(s.split())
+        hasg = bool(grx) and _any(grx, variants(s))
+        hasm = bool(MARIA_RX.search(s)) or bool(YOU_RX.search(s))
+        if hasg and not hasm:
+            gw += n; last = "g"
+        elif hasm and not hasg:
+            mw += n; last = "m"
+        elif hasg and hasm:
+            gw += n / 2; mw += n / 2
+        elif SHE_RX.search(s) and last:
+            if last == "g":
+                gw += n
+            else:
+                mw += n
+    t = gw + mw
+    if t == 0:
+        return "Joint"
+    if gw / t > 0.5:
         return "Guest"
-    if words >= 100 and (host >= 3 or g <= m):
+    if mw / t > 0.5:
         return "Maria"
     return "Joint"
 
