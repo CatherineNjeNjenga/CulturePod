@@ -259,7 +259,7 @@ def request_tables(df):
     per = []
     for r in eps.itertuples():
         try:
-            j = json.loads(r.requested) if isinstance(r.requested, str) else None
+            j = classify.clean_requested(json.loads(r.requested)) if isinstance(r.requested, str) else None
         except Exception:
             j = None
         if j is not None:
@@ -401,7 +401,7 @@ def set_output(name, value):
             f.write(f"{name}={value}\n")
 
 
-BUILD = "2026-10-13.2"
+BUILD = "2026-10-14.2"
 
 
 def check_build():
