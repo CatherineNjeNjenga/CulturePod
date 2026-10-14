@@ -9,6 +9,10 @@ on:
         description: "Rebuild charts even if no new episode was ingested"
         type: boolean
         default: false
+      report_guest:
+        description: "Substack report for this guest (part of the name). Leave empty for the newest episode."
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -62,6 +66,24 @@ jobs:
           FORCE: ${{ inputs.force }}
         run: |
           if [ "$FORCE" = "true" ]; then python run_weekly.py --force; else python run_weekly.py; fi
+
+      # Per-episode Substack report (Markdown + charts) from the derived numbers only. A failure here never stops the run.
+      - name: Write Substack report
+        id: report
+        if: steps.pipeline.outputs.new_data == 'true' || inputs.force
+        continue-on-error: true
+        env:
+          REPORT_GUEST: ${{ inputs.report_guest }}
+        run: |
+          if [ -n "$REPORT_GUEST" ]; then python episode_report.py --out out --guest "$REPORT_GUEST"; else python episode_report.py --out out; fi
+
+      - name: Upload Substack report
+        if: steps.report.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: substack-report-${{ github.run_id }}
+          path: out/substack/
+          retention-days: 90
 
       - name: Upload charts and tables
         if: always() && steps.pipeline.outputs.new_data == 'true'
