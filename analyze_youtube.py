@@ -28,7 +28,7 @@ import pandas as pd
 import nltk
 import classify
 
-BUILD = "2026-10-13.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-14.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -85,7 +85,7 @@ def _kw_text(raw):
 def _req_cols(raw):
     import json
     try:
-        j = json.loads(raw)
+        j = classify.clean_requested(json.loads(raw))
         return {"requests_total": j["total"], "requests_naming_someone": j["named"],
                 "requested_top": ", ".join(f"{x['name']} ({x['n']})" for x in j["names"][:5])}
     except Exception:
@@ -113,6 +113,21 @@ def _engagement(d, mar, gst):
     ts = pd.to_datetime(_col(d, "posted_at"), errors="coerce", utc=True)
     pub = pd.to_datetime(_col(d, "published").iloc[0], errors="coerce", utc=True)
     out["first_day_share"] = ((ts - pub) < pd.Timedelta(days=1))[ts.notna()].mean() if ts.notna().any() and pd.notna(pub) else np.nan
+    return out
+
+
+TONE_CUT = 0.05   # VADER's usual cut-offs: compound >= +0.05 positive, <= -0.05 negative, in between neutral
+
+
+def _tone_cols(d):
+    """Share of comments tagged only-Maria / only-guest that read positive or negative (VADER), with the comment counts behind them.
+    Neutral is the rest. Counted from the stored score, so it works after the text has been purged."""
+    out = {}
+    for key, tag in (("maria", "Maria"), ("guest", "Guest")):
+        c = d.loc[d["about"] == tag, "compound"].dropna()
+        out[f"tone_{key}_n"] = len(c)
+        out[f"tone_{key}_pos"] = (c >= TONE_CUT).mean() if len(c) else np.nan
+        out[f"tone_{key}_neg"] = (c <= -TONE_CUT).mean() if len(c) else np.nan
     return out
 
 
@@ -155,6 +170,7 @@ def per_episode(df, min_named=10):
             "work_guest_share": d["work"].isin(["Guest", "Both"]).mean() if "work" in d else np.nan,
             "doping_share": (d["topic"] == "doping").mean() if "topic" in d else np.nan,
             **{f"share_{c.lower()}": (d["about"] == c).mean() for c in classify.CATEGORIES},
+            **_tone_cols(d),
             "show_pos_share": ((d["about"] == "Show") & (d["compound"] > 0)).mean(),
             "show_neg_share": ((d["about"] == "Show") & (d["compound"] < 0)).mean(),
         })
