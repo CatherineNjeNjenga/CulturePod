@@ -11,7 +11,7 @@ import os
 import requests
 import pandas as pd
 
-BUILD = "2026-10-13.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-14.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 
 BASE = "https://www.googleapis.com/youtube/v3"
 DEFAULT_MAX_COMMENTS = int(os.environ.get("MAX_COMMENTS", "5000"))
