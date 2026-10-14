@@ -203,11 +203,65 @@ YouTube's developer policies allow storing public comment data for at most 30 ca
   kept; `run_weekly.py` reuses functions from `analyze_youtube.py`.
 
 
+## Reading pack (for the "what the audience thought" section)
+Run the `reading-pack` workflow (Actions > reading-pack > Run workflow; type part of a guest's name, or leave it empty for the latest
+episode whose text is still held) or `python reading_pack.py --guest "Zoe"`. You get `reading_pack.md`: the week's numbers and keyword
+candidates, then the most-liked and most-replied-to comments, show comments (most positive, most negative, a few from the middle),
+readable comments on the topic, comments about Maria, the guest and both, and the longest comments, each shown once, with a few
+prompts at the end. It holds **raw comment text** (no usernames): read it, paraphrase themes in the post (no quotes), delete it. The
+workflow keeps it for one day and never publishes it. Text exists only for 28 days after an episode, so read it in that window.
+
+## Positive / negative tone
+`episode_summary.csv` now has `tone_maria_pos/neg/n` and `tone_guest_pos/neg/n`: the share of comments tagged only-Maria or only-guest whose
+stored VADER score is at least +0.05 (positive) or at most -0.05 (negative), and how many comments that is (neutral is the rest). They come
+from the stored scores, so they exist for old episodes too. The Substack report adds a "How the comments felt" chart (positive bars up,
+negative down, Maria red and guest blue) and the site adds the same for the whole season (up/down on a desktop, left/right on a phone).
+Episodes with under 10 comments on either side are left off the site chart. Each report image carries a short "Source: ..." line; set
+`SOURCE_ON_IMAGES = False` in `episode_report.py` if the post already credits YouTube once.
+
+## Removing the text from your labelled samples
+The sample CSVs from `sample_neither.py` hold raw comment text, which YouTube's 30-day rule does not let you keep. After labelling them,
+run `python strip_samples.py comment_sample_v1.csv ... --tag Maria` (one sample type per run; `--tag` is the tag the sample was drawn
+from, so rows you labelled "ok" can be compared with today's rules). It writes `<name>_stripped.csv` with your labels, mode and notes plus
+derived values only (word count, writing system, a short fingerprint, and what today's rules say), clears any note that quotes the
+comment, scans its own output for copied text and refuses to continue if it finds any. `--delete-original` then deletes each original
+after the copy checks out (otherwise delete them yourself, including copies in Downloads, email or cloud folders). A stripped file cannot
+be re-run through changed rules, so for a fresh accuracy figure label a new sample.
+
+## Cleaning requested-guest names (also for old episodes)
+Requested names are stored per episode when it is ingested, so names saved under older rules (like "Notice" or "I'd") stay in the
+database. They are removed whenever the tables and charts are built (`classify.clean_requested`): a name is dropped when every word is
+a cue or stop word, a contraction or a single letter, or when it is listed in `name_blocklist.csv` (column `name`, e.g. a hotel or brand
+such as `Il Pellicano`). Add any other non-person that slips through to that file; no comment text is needed and nothing stored changes.
+
+## Weekly Substack report (one episode)
+`python episode_report.py` writes `out/substack/<date>_<guest>.md` for the latest episode (`--guest "Zoe"` for a specific one, `--all`
+for every episode): a neutral headline from that episode's gap and 95% range, a small table (shares, discussion-only gap, per 1,000
+views), how it ranks against the other counted episodes and the season so far, what else viewers wrote about, requested guests,
+a how-to-read list and the YouTube credit / method footer. It reads only `episode_summary.csv` and `run_info.json`. Add your own
+opening take before posting. Each report also gets a chart image next to it (`<date>_<guest>.png`, drawn with matplotlib, which is in `requirements.txt`): this episode's gap highlighted against every other episode, and a bar of what its comments were about. The Markdown already links it; episodes with fewer than 10 named comments say so instead of drawing a conclusion.
+
+The weekly workflow writes this report for the newest episode after each run that ingests new data, and uploads it as the artifact
+`substack-report-<run id>` (Actions > the run > Artifacts, kept 90 days). In a manual run you can type part of a guest's name into
+`report_guest` to get that episode instead, or tick `force` to write it even when nothing new arrived. If several episodes arrive in
+one run, only the newest gets a report; run `python episode_report.py --guest "..."` (or `--all`) for the others. A failure in this
+step never stops the pipeline.
+
 ## Public results page (GitHub Pages)
-`build_site.py` turns the output folder into `site/index.html`: the verdict, the charts (PNG with a link to an interactive version),
-the episode table, the most-requested guests and a few CSV downloads. It publishes only derived, episode-level files: no comment text,
-no usernames, and not the per-comment CSV or the alias audit. The caveats shown on the page are the `CAVEATS` list at the top of
-`build_site.py`; edit them as you like.
+`build_site.py` turns the output folder into `site/index.html`. It reads only `episode_summary.csv`, `guest_requests_table.csv`,
+`run_info.json` and the CSVs it offers as downloads, and publishes only derived, episode-level numbers: no comment text, no usernames,
+and not the per-comment CSV or the alias audit.
+
+The page has a plain-English headline (from the primary measure, `gap_all`, over episodes with 10+ named comments; "too early" under
+3 episodes), then five charts: gap per episode with a 95% range, the same test measured six ways, what the comments are about,
+comments per 1,000 views, and the cumulative gap. The charts are inline SVG drawn by the script (no plotting library): they follow
+phone/desktop width and light/dark mode, show a tooltip on hover or keyboard focus, have a "View as table" fold-out, and a
+"Save as image" button that makes a PNG in the visitor's browser. The per-episode range is a normal approximation from the
+comment counts; the averages use a seeded bootstrap over episodes, the same method as `verdict.txt`.
+A "Data and method" section credits YouTube as the source, links YouTube's Terms of Service and the Google Privacy Policy, and states
+the scope, the 28-day text purge, the rules version and the accuracy sentence. Edit `TITLE`, `INTRO`, `CAVEATS` and `ACCURACY` at the top
+of `build_site.py` (update `ACCURACY` whenever you re-check the rules on new labelled samples). Chart colours were validated with the
+data-viz palette checker; re-run it if you change them.
 
 To switch it on (once):
 1. Repository > Settings > Pages > Build and deployment > Source: **GitHub Actions**.
