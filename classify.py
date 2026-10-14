@@ -25,7 +25,7 @@ import unicodedata
 
 import numpy as np
 
-BUILD = "2026-10-13.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-14.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 
 
 def _strip(t):
@@ -290,6 +290,7 @@ wta atp tennis feminist feminism boa noite
 тогда лучший лучшая феминистка феминизм сильная личность обалденная теннисный подкаст пожалуйста спасибо также еще ещё
 """.split()}
 NAME_STOP |= {_strip(w) for w in "она он они её ее его это тоже так".split()}
+NAME_STOP |= {_strip(w) for w in """graphic designer spending which genxer clearly internet ceo cfo ai fan subscriber cant can't""".split()}
 PRONOUNS = set("her him them someone anyone somebody everyone more others".split())
 
 
@@ -429,7 +430,43 @@ def requested_names(df, top=15):
             counts[n] = counts.get(n, 0) + 1
     merged = merge_names(counts)
     out["names"] = [{"name": k, "n": v} for k, v in sorted(merged.items(), key=lambda kv: -kv[1])[:top]]
+    return clean_requested(out)
+
+NAME_BLOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "name_blocklist.csv")
+
+
+def name_blocklist():
+    """Whole names that are never a requested guest (a hotel, a brand...), from name_blocklist.csv (column name). Spelling-insensitive."""
+    out = set()
+    if os.path.exists(NAME_BLOCK_FILE):
+        for r in _csv_rows(NAME_BLOCK_FILE):
+            if (r.get("name") or "").strip():
+                out.add(_name_key(r["name"]))
     return out
+
+
+def _junk_token(tok):
+    s = _strip(tok)
+    return (s in NAME_STOP or MARIA_RX.fullmatch(s) is not None or len(re.sub(r"\W", "", s)) <= 1
+            or CONTRACTION_RX.fullmatch(s) is not None)
+
+
+def is_junk_name(name, blocked=None):
+    """True for a stored requested name that is not a person: every word is a cue/stop word, a contraction or a single letter
+    ("Notice", "I'd", "Big Fan", "U"), or it is on name_blocklist.csv. Works on names already stored, no comment text needed."""
+    toks = [re.sub(r"['\u2019]s$", "", t) for t in str(name).split()]
+    if not toks or all(_junk_token(t) for t in toks):
+        return True
+    return _name_key(name) in (name_blocklist() if blocked is None else blocked)
+
+
+def clean_requested(j):
+    """Copy of a stored requested-guests dict without its junk names (so old episodes are cleaned too, whatever rules were in force
+    when they were ingested). 'total' and 'named' are left as stored."""
+    if not isinstance(j, dict):
+        return j
+    blocked = name_blocklist()
+    return {**j, "names": [x for x in j.get("names", []) if not is_junk_name(x["name"], blocked)]}
 
 
 # --- Address vs discussion (Maria / Guest / Both comments) ---------------------------------------------------------------
