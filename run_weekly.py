@@ -235,10 +235,11 @@ def backfill_keywords(db):
 
 
 def backfill_requests(db):
-    """Episodes finished before this existed: work out the requested names, but only when every comment of the episode still has
-    its text (otherwise the tally would be partial and misleading)."""
-    eps = db.execute("""SELECT e.video_id, e.guest, e.guest_aliases FROM episodes e
-                        WHERE e.status='done' AND e.requested IS NULL
+    """Work out (and keep fresh) the requested names for every episode whose comments all still have their text, so a better name
+    rule reaches episodes still inside the 28-day window. Episodes whose text is partly or wholly purged keep what was stored
+    (a tally from partial text would be misleading)."""
+    eps = db.execute("""SELECT e.video_id, e.guest, e.guest_aliases, e.requested FROM episodes e
+                        WHERE e.status='done'
                           AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.video_id=e.video_id AND c.text IS NULL)
                           AND EXISTS (SELECT 1 FROM comments c WHERE c.video_id=e.video_id)""")
     for e in eps:
@@ -246,9 +247,10 @@ def backfill_requests(db):
         d["guest"], d["guest_aliases"] = e["guest"], e["guest_aliases"]
         d["video_id"] = e["video_id"]
         d["about"] = classify.classify(d)
-        db.execute("UPDATE episodes SET requested=? WHERE video_id=?",
-                   (json.dumps(classify.requested_names(d), ensure_ascii=False), e["video_id"]))
-        print(f"  {e['guest']}: requested guests filled in from the comments still held")
+        new = json.dumps(classify.requested_names(d), ensure_ascii=False)
+        if new != e.get("requested"):
+            db.execute("UPDATE episodes SET requested=? WHERE video_id=?", (new, e["video_id"]))
+            print(f"  {e['guest']}: requested guests {'filled in' if e.get('requested') is None else 'refreshed'} from the comments still held")
 
 
 def request_tables(df):
@@ -401,7 +403,7 @@ def set_output(name, value):
             f.write(f"{name}={value}\n")
 
 
-BUILD = "2026-10-15.2"
+BUILD = "2026-10-15.5"
 
 
 def check_build():
