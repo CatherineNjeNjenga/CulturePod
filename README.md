@@ -252,18 +252,20 @@ Heard, May...) were left out on purpose, because a stop word is also trimmed off
 ### Square versions for LinkedIn
 `episode_report.py` also writes a 1080 x 1080 version of each chart next to the originals (`..._linkedin.png`, `..._tone_linkedin.png`,
 `..._requests_linkedin.png`): same data and colours, text wrapped for a square frame. The source line stays on the image. Use
-`--no-linkedin` to skip them. They are in the same Actions artifact as the report.
+`--formats linkedin` to write only these (no Markdown, no wide charts), `--formats substack` to skip them, or the default `both`.
 
 ## Weekly Substack report (one episode)
-`python episode_report.py` writes `out/substack/<date>_<guest>.md` for the latest episode (`--guest "Zoe"` for a specific one, `--all`
+`python episode_report.py` writes `out/reports/<date>_<guest>.md` for the latest episode (`--guest "Zoe"` for a specific one, `--all`
 for every episode): a neutral headline from that episode's gap and 95% range, a small table (shares, discussion-only gap, per 1,000
 views), how it ranks against the other counted episodes and the season so far, what else viewers wrote about, requested guests,
 a how-to-read list and the YouTube credit / method footer. It reads only `episode_summary.csv` and `run_info.json`. Add your own
 opening take before posting. Each report also gets a chart image next to it (`<date>_<guest>.png`, drawn with matplotlib, which is in `requirements.txt`): this episode's gap highlighted against every other episode, and a bar of what its comments were about. The Markdown already links it; episodes with fewer than 10 named comments say so instead of drawing a conclusion.
 
-The weekly workflow writes this report for the newest episode after each run that ingests new data, and uploads it as the artifact
-`substack-report-<run id>` (Actions > the run > Artifacts, kept 90 days). In a manual run you can type part of a guest's name into
-`report_guest` to get that episode instead, or tick `force` to write it even when nothing new arrived. If several episodes arrive in
+The weekly workflow writes the reports for the newest episode after each run that ingests new data, and uploads them as the artifact
+`reports-<run id>` (Actions > the run > Artifacts, kept 90 days). In a manual run, the **reports** menu chooses what is written:
+`both` (also what the daily schedule does), `substack`, `linkedin` or `none` (the pipeline runs, no reports). You can also type part of
+a guest's name into `report_guest` to get that episode instead, and tick `force` to write reports (and rebuild everything) even when
+nothing new arrived: a report for an older episode needs `force` ticked. If several episodes arrive in
 one run, only the newest gets a report; run `python episode_report.py --guest "..."` (or `--all`) for the others. A failure in this
 step never stops the pipeline.
 
