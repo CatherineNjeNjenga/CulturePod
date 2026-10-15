@@ -9,8 +9,13 @@ on:
         description: "Rebuild charts even if no new episode was ingested"
         type: boolean
         default: false
+      reports:
+        description: "Which reports to write: both, substack (Markdown + wide charts), linkedin (square images only) or none"
+        type: choice
+        options: [both, substack, linkedin, none]
+        default: both
       report_guest:
-        description: "Substack report for this guest (part of the name). Leave empty for the newest episode."
+        description: "Report for this guest (part of the name). Leave empty for the newest episode. Tick 'force' too if no new episode arrived."
         type: string
         default: ""
 
@@ -67,22 +72,25 @@ jobs:
         run: |
           if [ "$FORCE" = "true" ]; then python run_weekly.py --force; else python run_weekly.py; fi
 
-      # Per-episode Substack report (Markdown + charts) from the derived numbers only. A failure here never stops the run.
-      - name: Write Substack report
+      # Per-episode reports (Substack Markdown + wide charts, and/or square LinkedIn images) from the derived numbers only.
+      # Choose in the run form: both (also what the daily schedule does), substack, linkedin or none. A failure here never stops the run.
+      - name: Write reports
         id: report
-        if: steps.pipeline.outputs.new_data == 'true' || inputs.force
+        if: (steps.pipeline.outputs.new_data == 'true' || inputs.force) && inputs.reports != 'none'
         continue-on-error: true
         env:
           REPORT_GUEST: ${{ inputs.report_guest }}
+          REPORT_FORMATS: ${{ inputs.reports }}
         run: |
-          if [ -n "$REPORT_GUEST" ]; then python episode_report.py --out out --guest "$REPORT_GUEST"; else python episode_report.py --out out; fi
+          FORMATS="${REPORT_FORMATS:-both}"
+          if [ -n "$REPORT_GUEST" ]; then python episode_report.py --out out --formats "$FORMATS" --guest "$REPORT_GUEST"; else python episode_report.py --out out --formats "$FORMATS"; fi
 
-      - name: Upload Substack report
+      - name: Upload reports
         if: steps.report.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: substack-report-${{ github.run_id }}
-          path: out/substack/
+          name: reports-${{ github.run_id }}
+          path: out/reports/
           retention-days: 90
 
       - name: Upload charts and tables
