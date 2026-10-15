@@ -25,7 +25,7 @@ import unicodedata
 
 import numpy as np
 
-BUILD = "2026-10-14.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-15.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 
 
 def _strip(t):
@@ -291,6 +291,34 @@ wta atp tennis feminist feminism boa noite
 """.split()}
 NAME_STOP |= {_strip(w) for w in "она он они её ее его это тоже так".split()}
 NAME_STOP |= {_strip(w) for w in """graphic designer spending which genxer clearly internet ceo cfo ai fan subscriber cant can't""".split()}
+# Ordinary words that open sentences or sit in the middle of comments (checked so as not to remove words that are also common first
+# names or surnames, e.g. Will, Hope, Grace, Mark, Rose, Cook, Young, Brown, Stone: those are deliberately NOT here).
+NAME_STOP |= {_strip(w) for w in """
+absolutely actually after afterwards ahead all almost along already although always amazingly another anybody anyway anything anywhere
+around because before being below besides between beyond both bring brings brought certainly come comes coming completely could couldnt
+definitely despite did didnt does doesnt doing done dont down during each either else enough entire especially even eventually every
+everybody everything everywhere exactly except finally follow following forget found frankly fully further generally give given gives
+going gone gonna gotta great guys had hadnt has hasnt having havent hearing hello hers herself himself honestly however hmm
+hopefully idk imo incredible indeed inside instead interesting into isnt itself keep kind knew know knows least less let lets like
+liked likes likewise literally little look looking looks lot lots make makes making many might mine mostly much must myself
+namely nearly neither never nevertheless nobody none nope normally nothing now obviously often okay once only onto other others
+ought otherwise out over overall own perhaps personally plus probably quite really recently remember right same saw say
+says see seems seen several shall shes should shouldnt since somehow someone something sometimes somewhere soon sorry specifically
+still such sure take taken takes taking tell than thankfully thats theirs them themselves theres these they theyre thing things think
+thinking thought through throughout thus together told took toward towards truly try trying under unfortunately unless until upon
+use used using usually various wanna wanted wants wasnt way well went werent whatever whats when whenever where whereas whether while
+whoever whole whom whose wont work works worth wouldnt wow yeah yep yet youre youve yours yourself
+anybody anyone everyone someone nobody
+amen congrats congratulations cheers bravo brava kudos respect goat icon icons inspiration inspiring
+episode episodes video videos channel clip clips part series season seasons question questions answer answers topic topics story stories
+life world women woman men man girl girls boy boys people person kids kid family mom dad mother father sister brother friend friends
+fan fans guest guests host hosts celebrity celebrities athlete athletes player players coach coaches champion champions star stars
+founder president director manager designer writer author actor actress singer comedian doctor lawyer teacher professor engineer
+business sport sports music movie movies film films book books game games match matches career story journey mindset leadership
+monday tuesday wednesday thursday friday saturday sunday january february march july september october november december
+gracias muchas hola obrigado obrigada muito merci danke bonjour ciao grazie hallo
+english spanish french german russian italian american british canadian australian african asian european chinese japanese indian
+africa asia europe australia japan korea mexico argentina poland serbia croatia czech greece turkey egypt nigeria """.split()}
 PRONOUNS = set("her him them someone anyone somebody everyone more others".split())
 
 
