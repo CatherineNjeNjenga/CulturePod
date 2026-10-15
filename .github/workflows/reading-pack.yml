@@ -1,0 +1,41 @@
+name: reading-pack
+
+# A one-day download of comments from ONE episode for you to skim before writing the "what the audience thought" section.
+# It contains raw comment text (no usernames): read it, paraphrase in the post, delete it. It is never published.
+on:
+  workflow_dispatch:
+    inputs:
+      guest:
+        description: "Part of the guest's name. Leave empty for the most recent episode whose text is still held."
+        default: ""
+      n:
+        description: "Comments per section"
+        default: "12"
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install requests numpy
+      - name: Write the reading pack
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          GUEST: ${{ inputs.guest }}
+          N: ${{ inputs.n }}
+        run: |
+          if [ -n "$GUEST" ]; then python reading_pack.py --guest "$GUEST" --n "$N"; else python reading_pack.py --n "$N"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reading-pack
+          path: reading_pack.md
+          retention-days: 1
