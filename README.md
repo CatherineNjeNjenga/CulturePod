@@ -211,6 +211,15 @@ readable comments on the topic, comments about Maria, the guest and both, and th
 prompts at the end. It holds **raw comment text** (no usernames): read it, paraphrase themes in the post (no quotes), delete it. The
 workflow keeps it for one day and never publishes it. Text exists only for 28 days after an episode, so read it in that window.
 
+## Likes per 1,000 views (Substack report)
+
+The report ends its tone section with one sentence: views, likes per 1,000 views, and how that compares with the earlier episodes
+("above", "about the same as" within 10%, or "below"). It is about the episode as a whole, not about Maria or the guest, and silent
+viewers are in the denominator, so it is for comparing episodes, not a share of viewers who liked it. The like count is a snapshot
+taken when the views were fetched, so the line follows the same rule as the per-1,000-views chart: if the snapshot is too old
+(`VIEWS_MAX_AGE_DAYS`), or fewer than 3 earlier episodes have a comparable count, the line is left out. The new column in
+`episode_summary.csv` is `likes_per_1k_views` (with `video_likes`).
+
 ## Positive / negative tone
 `episode_summary.csv` now has `tone_maria_pos/neg/n` and `tone_guest_pos/neg/n`: the share of comments tagged only-Maria or only-guest whose
 stored VADER score is at least +0.05 (positive) or at most -0.05 (negative), and how many comments that is (neutral is the rest). They come
@@ -233,6 +242,17 @@ Requested names are stored per episode when it is ingested, so names saved under
 database. They are removed whenever the tables and charts are built (`classify.clean_requested`): a name is dropped when every word is
 a cue or stop word, a contraction or a single letter, or when it is listed in `name_blocklist.csv` (column `name`, e.g. a hotel or brand
 such as `Il Pellicano`). Add any other non-person that slips through to that file; no comment text is needed and nothing stored changes.
+
+The stop-word list (`NAME_STOP` in `classify.py`) was widened in build 2026-10-15.2 with several hundred everyday words (sentence
+openers like "Honestly", "Absolutely", "Overall", "Congrats", weekdays and months, nationalities, job titles, a few Spanish,
+Portuguese, French and Italian thank-yous). Words that are also first names or surnames (Will, Hope, Grace, Mark, Brown, Stone, Legend,
+Heard, May...) were left out on purpose, because a stop word is also trimmed off the end of a real name ("John Legend" must not become
+"John"). If an ordinary word still gets through, put it in `name_blocklist.csv`; to stop it at the source, add it to `NAME_STOP`.
+
+### Square versions for LinkedIn
+`episode_report.py` also writes a 1080 x 1080 version of each chart next to the originals (`..._linkedin.png`, `..._tone_linkedin.png`,
+`..._requests_linkedin.png`): same data and colours, text wrapped for a square frame. The source line stays on the image. Use
+`--no-linkedin` to skip them. They are in the same Actions artifact as the report.
 
 ## Weekly Substack report (one episode)
 `python episode_report.py` writes `out/substack/<date>_<guest>.md` for the latest episode (`--guest "Zoe"` for a specific one, `--all`
