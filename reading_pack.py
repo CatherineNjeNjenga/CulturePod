@@ -41,7 +41,7 @@ def tone(c):
 
 
 def pick_episode(db, guest):
-    rows = db.execute("""SELECT e.video_id, e.guest, e.published, e.keywords, e.requested, e.n_comments,
+    rows = db.execute("""SELECT e.video_id, e.guest, e.guest_aliases, e.published, e.keywords, e.requested, e.n_comments,
                                 (SELECT COUNT(*) FROM comments c WHERE c.video_id=e.video_id AND c.text IS NOT NULL) AS held
                          FROM episodes e WHERE e.status='done' ORDER BY e.published DESC""")
     rows = [r for r in rows if r["held"]]
@@ -63,8 +63,19 @@ def block(title, items, shown):
         if x.get("replies"):
             meta += f", {x['replies']} repl{'ies' if x['replies'] != 1 else 'y'}"
         meta += f" · tagged {x['about']} · {tone(x['compound'])}"
+        if x.get("about") == "Request":
+            meta += f" · names read: {x.get('names') or 'none'}"
         out += [f"> {clean(x['text'])}", f"> *{meta}*", ""]
     return "\n".join(out) + "\n"
+
+
+def names_reader(db, ep, rows):
+    """Function text -> names the rules read from it (what the requested-guests chart would count), for Request comments."""
+    ids = str(ep["guest_aliases"] if "guest_aliases" in ep.keys() else "")
+    skip = {t for a in ids.split("|") for t in re.findall(r"\w+", classify._strip(a))}
+    skip |= set(re.findall(r"\w+", classify._strip(str(ep["guest"]))))
+    common = classify.common_words([r["text"] for r in rows if r["about"] != "Request"])
+    return lambda t: classify._names_in(str(t), skip, common)
 
 
 def build(db, ep, n, seed):
@@ -72,6 +83,9 @@ def build(db, ep, n, seed):
         """SELECT comment_key, text, likes, replies, compound, about, mode, words FROM comments
            WHERE video_id=? AND text IS NOT NULL AND is_reply=0""", (ep["video_id"],))]
     rows = [r for r in rows if r["about"] not in ("Noise", "Reaction")]
+    read = names_reader(db, ep, rows)
+    for r in rows:
+        r["names"] = ", ".join(read(r["text"])) if r["about"] == "Request" else None
     for r in rows:
         r["likes"], r["replies"], r["words"] = r["likes"] or 0, r["replies"] or 0, r["words"] or len(str(r["text"]).split())
     rng = random.Random(seed)
@@ -116,6 +130,7 @@ def build(db, ep, n, seed):
     shown_show = {x["comment_key"] for x in top + low}
     body.append(block("About the show or episode: most positive, most negative, and a few from the middle",
                       top + low + sample([r for r in show if r["comment_key"] not in shown_show], k), shown))
+    body.append(block("Asking for a guest (read these to see who was named and who was missed)", [r for r in rows if r["about"] == "Request"][:max(n, 12)], shown))
     body.append(block("Comments about the topic (5+ words, no name)", sample([r for r in rows if r["about"] == "Topic"], n), shown))
     body.append(block("About Maria only", sample([r for r in rows if r["about"] == "Maria"], n), shown))
     body.append(block("About the guest only", sample([r for r in rows if r["about"] == "Guest"], n), shown))
