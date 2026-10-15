@@ -263,6 +263,9 @@ tag changed (to Request, correctly). Comments whose text is already purged keep 
 requested names of every episode whose text is still held, so these rules reach episodes inside the 28-day window.
 A single first name such as "Iga" is kept as it is; add a row to `name_aliases.csv` (`Iga,Iga Swiatek`) to join it with the full name.
 
+In the reading pack, every comment tagged Request now ends with "names read: ...", the name(s) the rules took from it (or "none").
+Use it to see at once which requests the chart counted and which it missed.
+
 ### Square versions for LinkedIn
 `episode_report.py` also writes a 1080 x 1080 version of each chart next to the originals (`..._linkedin.png`, `..._tone_linkedin.png`,
 `..._requests_linkedin.png`): same data and colours, text wrapped for a square frame. The source line stays on the image. Use
