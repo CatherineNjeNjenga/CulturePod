@@ -65,7 +65,11 @@ def draw_chart(e, i, path):
         return False
     r = e.iloc[i]
     ink, mut = "#1d1d1f", "#5f5f66"
-    names = {"maria": "Only Maria named", "guest": "Only the guest named", "both": "Both named", "show": "About the show",
+    gname = str(r.get("guest") or "").strip() or "the guest"
+    glab = f"Only {gname} named"
+    if len(glab) > 24:                       # long names: wrap onto two lines so the label stays inside the margin
+        glab = f"Only {gname}\nnamed"
+    names = {"maria": "Only Maria named", "guest": glab, "both": "Both named", "show": "About the show",
              "request": "Asking for a guest"}
     vals = [(k, names.get(k, nm), float(r.get(c) or 0) * 100) for k, nm, c in bs.MIX]
     rest = max(0.0, 100 - sum(v for _, _, v in vals))
@@ -85,6 +89,7 @@ def draw_chart(e, i, path):
         ax.spines[sp].set_visible(False)
     ax.spines["bottom"].set_color("#bbbbbb")
     ax.tick_params(axis="both", length=0, labelsize=8.5, colors=mut)
+    ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=6, steps=[1, 2, 5, 10], integer=True))   # whole-percent ticks only (2.5 steps showed as 2%, 5%, 8%)
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, _: f"{x:.0f}%"))
     ax.set_xlabel("Share of all comments", fontsize=8.5, color=mut)
     g = r["gap_pts"]
@@ -267,7 +272,7 @@ def report(e, i, info, image=None, req_image=None, tone_image=None):
     else:
         L.append("- Not enough data for a comparison yet.")
     L.append("")
-    rename = {"Maria": "only Maria named", "Guest": "only the guest named", "Both": "both named"}
+    rename = {"Maria": "only Maria named", "Guest": f"only {str(r['guest']).strip() or 'the guest'} named", "Both": "both named"}
     mix = [(rename.get(n, n), r.get(c)) for _, n, c in bs.MIX if c in r and pd.notna(r.get(c))]
     if mix:
         other = max(0.0, 1 - sum(v for _, v in mix))
