@@ -1,7 +1,7 @@
 """Write a Substack-ready, per-episode "Maria vs the guest" report (Markdown) from the pipeline's output folder.
 
 Usage:
-  python episode_report.py                      # the most recent episode  -> out/substack/<date>_<guest>.md
+  python episode_report.py                      # the most recent episode  -> out/reports/<date>_<guest>.md
   python episode_report.py --guest "Zoe"        # the episode whose guest name contains this text
   python episode_report.py --all                # every episode
 
@@ -390,7 +390,8 @@ def main():
     ap.add_argument("--out", default="out")
     ap.add_argument("--guest", default=None, help="part of the guest name")
     ap.add_argument("--all", action="store_true")
-    ap.add_argument("--no-linkedin", dest="linkedin", action="store_false", help="skip the square 1080 x 1080 versions for LinkedIn")
+    ap.add_argument("--formats", choices=["substack", "linkedin", "both"], default="both",
+                    help="substack = Markdown report + wide charts; linkedin = square 1080 x 1080 charts only; both (default)")
     a = ap.parse_args()
     p = os.path.join(a.out, "episode_summary.csv")
     if not os.path.exists(p):
@@ -413,23 +414,26 @@ def main():
         idx = [len(e) - 1]
     tp = os.path.join(a.out, "guest_requests_table.csv")
     table = pd.read_csv(tp) if os.path.exists(tp) else None
-    d = os.path.join(a.out, "substack")
+    d = os.path.join(a.out, "reports")
     os.makedirs(d, exist_ok=True)
     for i in idx:
         base = os.path.join(d, f"{e.loc[i, 'published']}_{slug(e.loc[i, 'guest'])}")
         base_name = os.path.basename(base)
-        img = os.path.basename(base) + ".png" if draw_chart(e, i, base + ".png") else None
-        timg = base_name + "_tone.png" if draw_tone(e, i, base + "_tone.png") else None
-        rimg = base_name + "_requests.png" if draw_requests(e, i, base + "_requests.png", table) else None
-        if a.linkedin:
-            draw_chart(e, i, base + "_linkedin.png", sq=True)
-            draw_tone(e, i, base + "_tone_linkedin.png", sq=True)
-            draw_requests(e, i, base + "_requests_linkedin.png", table, sq=True)
-        md = report(e, i, info, img, rimg, timg)
-        path = base + ".md"
-        open(path, "w", encoding="utf-8").write(md)
-        print("Wrote", path)
-    if len(idx) == 1:
+        md = None
+        if a.formats in ("substack", "both"):
+            img = base_name + ".png" if draw_chart(e, i, base + ".png") else None
+            timg = base_name + "_tone.png" if draw_tone(e, i, base + "_tone.png") else None
+            rimg = base_name + "_requests.png" if draw_requests(e, i, base + "_requests.png", table) else None
+            md = report(e, i, info, img, rimg, timg)
+            path = base + ".md"
+            open(path, "w", encoding="utf-8").write(md)
+            print("Wrote", path)
+        if a.formats in ("linkedin", "both"):
+            ok = [draw_chart(e, i, base + "_linkedin.png", sq=True),
+                  draw_tone(e, i, base + "_tone_linkedin.png", sq=True),
+                  draw_requests(e, i, base + "_requests_linkedin.png", table, sq=True)]
+            print(f"Wrote {sum(map(bool, ok))} LinkedIn image(s) for {e.loc[i, 'guest']}")
+    if len(idx) == 1 and md:
         print("\n" + md)
 
 
