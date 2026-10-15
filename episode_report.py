@@ -54,6 +54,17 @@ def verdict_line(r):
 COL = {"maria": "#C8553D", "guest": "#1B74B8", "both": "#B8860B", "show": "#2A9D6F", "request": "#7B5EA7", "other": "#C9C9C9"}   # light palette, validated
 
 
+TITLES = {"dr", "dr.", "mr", "mr.", "mrs", "mrs.", "ms", "ms.", "prof", "prof.", "sir", "dame", "coach"}
+
+
+def first_name(guest):
+    """First name of the guest, to match 'Maria' ('Alex Eala' -> 'Alex'; a leading title such as 'Dr.' is skipped)."""
+    parts = str(guest or "").split()
+    while len(parts) > 1 and parts[0].lower() in TITLES:
+        parts = parts[1:]
+    return parts[0] if parts else "the guest"
+
+
 def draw_chart(e, i, path):
     """PNG for Substack: a bar graph of what this episode's comments were about (share of all comments); 'everything else' is left off."""
     try:
@@ -65,10 +76,7 @@ def draw_chart(e, i, path):
         return False
     r = e.iloc[i]
     ink, mut = "#1d1d1f", "#5f5f66"
-    gname = str(r.get("guest") or "").strip() or "the guest"
-    glab = f"Only {gname} named"
-    if len(glab) > 24:                       # long names: wrap onto two lines so the label stays inside the margin
-        glab = f"Only {gname}\nnamed"
+    glab = f"Only {first_name(r.get('guest'))} named"
     names = {"maria": "Only Maria named", "guest": glab, "both": "Both named", "show": "About the show",
              "request": "Asking for a guest"}
     vals = [(k, names.get(k, nm), float(r.get(c) or 0) * 100) for k, nm, c in bs.MIX]
@@ -272,7 +280,7 @@ def report(e, i, info, image=None, req_image=None, tone_image=None):
     else:
         L.append("- Not enough data for a comparison yet.")
     L.append("")
-    rename = {"Maria": "only Maria named", "Guest": f"only {str(r['guest']).strip() or 'the guest'} named", "Both": "both named"}
+    rename = {"Maria": "only Maria named", "Guest": f"only {first_name(r['guest'])} named", "Both": "both named"}
     mix = [(rename.get(n, n), r.get(c)) for _, n, c in bs.MIX if c in r and pd.notna(r.get(c))]
     if mix:
         other = max(0.0, 1 - sum(v for _, v in mix))
