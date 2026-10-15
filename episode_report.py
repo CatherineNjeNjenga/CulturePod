@@ -24,6 +24,15 @@ YT_TERMS = bs.YT_TERMS
 G_PRIVACY = bs.G_PRIVACY
 
 
+SQ = 6.0          # LinkedIn version: a 6 x 6 inch square at 180 dpi = 1080 x 1080 pixels
+
+
+def wrap(t, n):
+    """Wrap text for the square layout (explicit line breaks)."""
+    import textwrap
+    return "\n".join(textwrap.fill(p, n) for p in str(t).split("\n"))
+
+
 def slug(s):
     return re.sub(r"[^a-z0-9]+", "-", str(s).lower()).strip("-") or "episode"
 
@@ -65,7 +74,7 @@ def first_name(guest):
     return parts[0] if parts else "the guest"
 
 
-def draw_chart(e, i, path):
+def draw_chart(e, i, path, sq=False):
     """PNG for Substack: a bar graph of what this episode's comments were about (share of all comments); 'everything else' is left off."""
     try:
         import matplotlib
@@ -81,8 +90,11 @@ def draw_chart(e, i, path):
              "request": "Asking for a guest"}
     vals = [(k, names.get(k, nm), float(r.get(c) or 0) * 100) for k, nm, c in bs.MIX]
     rest = max(0.0, 100 - sum(v for _, _, v in vals))
-    fig, ax = plt.subplots(figsize=(8, 4.2), dpi=200, facecolor="white")
-    fig.subplots_adjust(left=0.27, right=0.94, top=0.8, bottom=0.17)
+    fig, ax = plt.subplots(figsize=(SQ, SQ) if sq else (8, 4.2), dpi=180 if sq else 200, facecolor="white")
+    if sq:
+        fig.subplots_adjust(left=0.33, right=0.93, top=0.73, bottom=0.17)
+    else:
+        fig.subplots_adjust(left=0.27, right=0.94, top=0.8, bottom=0.17)
     ys = list(range(len(vals)))[::-1]
     top = max([v for _, _, v in vals] + [1])
     for y, (k, nm, v) in zip(ys, vals):
@@ -102,12 +114,18 @@ def draw_chart(e, i, path):
     ax.set_xlabel("Share of all comments", fontsize=8.5, color=mut)
     g = r["gap_pts"]
     head = (f"Pretty Tough with {r['guest']}: what viewers wrote about" if r["reliable"] else f"Pretty Tough with {r['guest']}: too few named comments")
-    fig.text(0.04, 0.93, head, fontsize=13, fontweight="bold", color=ink)
     sub = f"{int(r['n_comments']):,} comments in the first 7 days."
     if r["reliable"]:
         sub += f" Gap (Maria minus guest): {bs._pts(g)} points."
-    fig.text(0.04, 0.865, sub, fontsize=8.5, color=mut)
-    fig.text(0.04, 0.02, f"Not shown: {rest:.0f}% of comments (thanks, reactions, topic talk, no name). {SRC}".strip(), fontsize=7, color=mut)
+    foot = f"Not shown: {rest:.0f}% of comments (thanks, reactions, topic talk, no name). {SRC}".strip()
+    if sq:
+        fig.text(0.05, 0.96, wrap(head, 36), fontsize=14, fontweight="bold", color=ink, va="top", linespacing=1.25)
+        fig.text(0.05, 0.835, wrap(sub, 62), fontsize=9, color=mut, va="top")
+        fig.text(0.05, 0.02, wrap(foot, 80), fontsize=7.2, color=mut)
+    else:
+        fig.text(0.04, 0.93, head, fontsize=13, fontweight="bold", color=ink)
+        fig.text(0.04, 0.865, sub, fontsize=8.5, color=mut)
+        fig.text(0.04, 0.02, foot, fontsize=7, color=mut)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
     return True
@@ -117,7 +135,7 @@ def tone_ok(r):
         max(r.get("tone_maria_n") or 0, r.get("tone_guest_n") or 0) >= 10
 
 
-def draw_tone(e, i, path):
+def draw_tone(e, i, path, sq=False):
     """PNG for Substack: positive comments go up, negative go down, for Maria and for the guest (neutral is not drawn)."""
     r = e.iloc[i]
     if not tone_ok(r):
@@ -132,8 +150,11 @@ def draw_tone(e, i, path):
     pos = [r["tone_maria_pos"] * 100, r["tone_guest_pos"] * 100]
     neg = [r["tone_maria_neg"] * 100, r["tone_guest_neg"] * 100]
     ns = [int(r["tone_maria_n"]), int(r["tone_guest_n"])]
-    fig, ax = plt.subplots(figsize=(7, 5.4), dpi=200, facecolor="white")
-    fig.subplots_adjust(left=0.13, right=0.95, top=0.78, bottom=0.17)
+    fig, ax = plt.subplots(figsize=(SQ, SQ) if sq else (7, 5.4), dpi=180 if sq else 200, facecolor="white")
+    if sq:
+        fig.subplots_adjust(left=0.14, right=0.95, top=0.72, bottom=0.17)
+    else:
+        fig.subplots_adjust(left=0.13, right=0.95, top=0.78, bottom=0.17)
     top = max(max(pos), 10)
     low = max(max(neg), 5)
     for x, p_, n_, c, nn in zip((0, 1), pos, neg, (COL["maria"], COL["guest"]), ns):
@@ -156,13 +177,42 @@ def draw_tone(e, i, path):
     ax.tick_params(axis="x", labelsize=10, labelcolor=ink, pad=8)
     ax.text(1.58, top * 1.1, "\u25B2 positive", ha="right", fontsize=9, color=mut)
     ax.text(1.58, -(low * 1.5 + top * 0.08), "\u25BC negative", ha="right", fontsize=9, color=mut)
-    fig.text(0.04, 0.93, f"How the comments felt: {r['guest']} episode", fontsize=13, fontweight="bold", color=ink)
-    fig.text(0.04, 0.875, "Share of comments naming only that person that read positive (up) or negative (down).", fontsize=8.5, color=mut)
-    fig.text(0.04, 0.835, "Neutral comments are not drawn, so up + down is less than 100%.", fontsize=8.5, color=mut)
-    fig.text(0.04, 0.03, SRC, fontsize=7, color=mut)
+    if sq:
+        fig.text(0.05, 0.96, wrap(f"How the comments felt: {r['guest']} episode", 36), fontsize=14, fontweight="bold", color=ink, va="top", linespacing=1.25)
+        fig.text(0.05, 0.835, wrap("Share of comments naming only that person that read positive (up) or negative (down). "
+                                   "Neutral comments are not drawn, so up + down is less than 100%.", 62), fontsize=9, color=mut, va="top")
+        fig.text(0.05, 0.03, SRC, fontsize=7.2, color=mut)
+    else:
+        fig.text(0.04, 0.93, f"How the comments felt: {r['guest']} episode", fontsize=13, fontweight="bold", color=ink)
+        fig.text(0.04, 0.875, "Share of comments naming only that person that read positive (up) or negative (down).", fontsize=8.5, color=mut)
+        fig.text(0.04, 0.835, "Neutral comments are not drawn, so up + down is less than 100%.", fontsize=8.5, color=mut)
+        fig.text(0.04, 0.03, SRC, fontsize=7, color=mut)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
     return True
+
+
+MIN_EARLIER = 3        # earlier comparable episodes needed before the likes line is written
+SAME_BAND = 0.10       # within 10% of the earlier average counts as "about the same"
+
+
+def reception_line(e, i):
+    """One sentence: views, likes per 1,000 views, and how that compares with earlier episodes. '' when it cannot be said fairly
+    (views not comparable, no like count, or fewer than MIN_EARLIER earlier episodes with a comparable count)."""
+    r = e.iloc[i]
+    v, lk, views = r.get("likes_per_1k_views"), r.get("video_likes"), r.get("views")
+    if "likes_per_1k_views" not in e or pd.isna(v) or pd.isna(views):
+        return ""
+    prev = e[(e["published"] < r["published"]) & e["likes_per_1k_views"].notna()]
+    if len(prev) < MIN_EARLIER:
+        return ""
+    avg = float(prev["likes_per_1k_views"].mean())
+    rel = (float(v) - avg) / avg if avg > 0 else 0.0
+    verdict = ("about the same as" if abs(rel) <= SAME_BAND else "above" if rel > 0 else "below")
+    return (f"The {first_name(r['guest'])} episode had {int(views):,} views and **{float(v):.0f} likes per 1,000 views**, {verdict} the "
+            f"{avg:.0f} average for the {len(prev)} earlier episodes. "
+            "This is a reaction to the episode as a whole, not to Maria or the guest. It counts silent viewers too, so read it as "
+            "\"this many in every 1,000 views ended in a like\", and compare episodes with each other rather than reading the number alone.")
 
 
 def parse_requests(txt):
@@ -195,7 +245,7 @@ def request_rows(e, i, table, top=8):
     return [x for x in rows if x[1] + x[2] > 0]
 
 
-def draw_requests(e, i, path, table=None):
+def draw_requests(e, i, path, table=None, sq=False):
     """PNG for Substack: guests viewers asked for, all-time total per name (bar), with this episode's part highlighted."""
     r = e.iloc[i]
     rows = request_rows(e, i, table)
@@ -209,9 +259,12 @@ def draw_requests(e, i, path, table=None):
         return False
     ink, mut = "#1d1d1f", "#5f5f66"
     n = len(rows)
-    h = 2.3 + 0.45 * n
-    fig, ax = plt.subplots(figsize=(8, h), dpi=200, facecolor="white")
-    fig.subplots_adjust(left=0.27, right=0.93, top=1 - 1.25 / h, bottom=0.85 / h + 0.05)
+    h = SQ if sq else 2.3 + 0.45 * n
+    fig, ax = plt.subplots(figsize=(SQ if sq else 8, h), dpi=180 if sq else 200, facecolor="white")
+    if sq:
+        fig.subplots_adjust(left=0.33, right=0.92, top=0.70, bottom=0.14)
+    else:
+        fig.subplots_adjust(left=0.27, right=0.93, top=1 - 1.25 / h, bottom=0.85 / h + 0.05)
     ys = list(range(n))[::-1]
     top = max(a + b for _, a, b in rows)
     LIGHT = "#CBBFE0"
@@ -224,6 +277,8 @@ def draw_requests(e, i, path, table=None):
     ax.set_yticklabels([nm[:28] for nm, _, _ in rows], fontsize=9.5, color=ink)
     ax.set_xlim(0, top * 1.35)
     ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True, nbins=5))
+    if sq and n < 5:                      # keep bars the same thickness as a full chart: leave the empty rows at the bottom
+        ax.set_ylim(-0.5 - (5 - n), n - 0.5)
     ax.grid(axis="x", color="#e6e6e6", lw=0.8, zorder=0)
     ax.set_axisbelow(True)
     for sp in ("top", "right", "left"):
@@ -232,13 +287,19 @@ def draw_requests(e, i, path, table=None):
     ax.tick_params(axis="both", length=0, labelsize=8.5, colors=mut)
     ax.set_xlabel("Comments asking for this guest (all counted episodes so far)", fontsize=8.5, color=mut)
     ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2, frameon=False, fontsize=8.5, handlelength=1, labelcolor=ink)
-    fig.text(0.04, 1 - 0.38 / h, "Guests viewers ask for", fontsize=13, fontweight="bold", color=ink)
+    if not sq:
+        fig.text(0.04, 1 - 0.38 / h, "Guests viewers ask for", fontsize=13, fontweight="bold", color=ink)
     none_new = not any(a for _, a, _ in rows)
     first = (f"No guest was named under the {r['guest']} episode; the bars carry over the totals from earlier episodes." if none_new else
              f"Dark part = comments under the {r['guest']} episode; light part = earlier counted episodes. ")
-    fig.text(0.04, 1 - 0.58 / h, first +
-             "\nNames are read by simple rules, so counts are approximate.", fontsize=7.5, color=mut, va="top")
-    fig.text(0.04, 0.2 / h, SRC, fontsize=7, color=mut)
+    if sq:
+        fig.text(0.05, 0.96, "Guests viewers ask for", fontsize=14, fontweight="bold", color=ink, va="top")
+        fig.text(0.05, 0.885, wrap(first + "\nNames are read by simple rules, so counts are approximate.", 66), fontsize=8.5, color=mut, va="top")
+        fig.text(0.05, 0.03, SRC, fontsize=7.2, color=mut)
+    else:
+        fig.text(0.04, 1 - 0.58 / h, first +
+                 "\nNames are read by simple rules, so counts are approximate.", fontsize=7.5, color=mut, va="top")
+        fig.text(0.04, 0.2 / h, SRC, fontsize=7, color=mut)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
     return True
@@ -293,6 +354,10 @@ def report(e, i, info, image=None, req_image=None, tone_image=None):
         L.append(f"![Positive and negative comments in the {r['guest']} episode]({tone_image})\n")
         L.append("*Tone is an automatic score (VADER), not a reading of each comment: it misses sarcasm and context. Much of the positive "
                  "tone toward Maria is thanks addressed to her, so read it as warmth, not as who is more interesting.*\n")
+    rec = reception_line(e, i)
+    if rec:
+        L.append("## How the whole episode was received")
+        L.append(rec + "\n")
     kw = str(r.get("keywords") or "").strip()
     if kw and kw.lower() != "nan":
         L.append(f"**Words that stood out in this episode's comments:** {kw}\n")
@@ -325,6 +390,7 @@ def main():
     ap.add_argument("--out", default="out")
     ap.add_argument("--guest", default=None, help="part of the guest name")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--no-linkedin", dest="linkedin", action="store_false", help="skip the square 1080 x 1080 versions for LinkedIn")
     a = ap.parse_args()
     p = os.path.join(a.out, "episode_summary.csv")
     if not os.path.exists(p):
@@ -355,6 +421,10 @@ def main():
         img = os.path.basename(base) + ".png" if draw_chart(e, i, base + ".png") else None
         timg = base_name + "_tone.png" if draw_tone(e, i, base + "_tone.png") else None
         rimg = base_name + "_requests.png" if draw_requests(e, i, base + "_requests.png", table) else None
+        if a.linkedin:
+            draw_chart(e, i, base + "_linkedin.png", sq=True)
+            draw_tone(e, i, base + "_tone_linkedin.png", sq=True)
+            draw_requests(e, i, base + "_requests_linkedin.png", table, sq=True)
         md = report(e, i, info, img, rimg, timg)
         path = base + ".md"
         open(path, "w", encoding="utf-8").write(md)
