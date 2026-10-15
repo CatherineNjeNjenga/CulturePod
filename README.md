@@ -249,6 +249,20 @@ Portuguese, French and Italian thank-yous). Words that are also first names or s
 Heard, May...) were left out on purpose, because a stop word is also trimmed off the end of a real name ("John Legend" must not become
 "John"). If an ordinary word still gets through, put it in `name_blocklist.csv`; to stop it at the source, add it to `NAME_STOP`.
 
+Russian names change with the grammar ("Аллу Пугачёву", "Алла Пугачёва", "Аллы Пугачёвой"). Since build 2026-10-15.4 these forms are
+grouped as one name (the case ending is cut off before names are compared); the group is shown under its most common spelling. To show
+an English name instead, add a row to `name_aliases.csv` (columns `variant,name`), for example `Алла Пугачёва,Alla Pugacheva`; one row
+per person is enough. The reading pack now has a section "Asking for a guest" with the comments tagged as requests, so you can see
+which names the rules missed.
+
+Rules version 2026-10-15.1 (build 2026-10-15.5) widened what counts as a request and how names are read: "I hope you interview...",
+"hope you will share an episode with X" and "hope to see ... next podcast" are now tagged as requests, and a name typed in lower case
+inside an otherwise normal sentence ("hope to see with karlie kloss next podcast") is picked up when it follows a cue such as
+see / invite / bring / host and is followed by on / next / podcast. Checked on the 383 comments in your labelled samples: exactly one
+tag changed (to Request, correctly). Comments whose text is already purged keep their old tags. The weekly run also recomputes the
+requested names of every episode whose text is still held, so these rules reach episodes inside the 28-day window.
+A single first name such as "Iga" is kept as it is; add a row to `name_aliases.csv` (`Iga,Iga Swiatek`) to join it with the full name.
+
 ### Square versions for LinkedIn
 `episode_report.py` also writes a 1080 x 1080 version of each chart next to the originals (`..._linkedin.png`, `..._tone_linkedin.png`,
 `..._requests_linkedin.png`): same data and colours, text wrapped for a square frame. The source line stays on the image. Use
