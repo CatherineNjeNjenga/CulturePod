@@ -28,7 +28,7 @@ import pandas as pd
 import nltk
 import classify
 
-BUILD = "2026-10-15.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-15.5"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
