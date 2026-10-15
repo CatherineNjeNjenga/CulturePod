@@ -25,7 +25,7 @@ import unicodedata
 
 import numpy as np
 
-BUILD = "2026-10-15.2"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-15.5"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 
 
 def _strip(t):
@@ -144,6 +144,9 @@ REQUEST_RX = re.compile(
     r"\bnext guest\b|\bnext\W*(pls|plz|please)?\W*$|^\W*next (episode|video)\b|\bnext (episode|video)\W{0,3}(with|featuring|ft|guest|please|pls|plz)\b|"
     r"\b(have|bring|invite|get|want|wish|hope|wanna|make|do)\b.{0,40}\bnext (episode|video)\b|^\W*next\b|\bwe need\b.{0,30}\b(on|interview|podcast)\b|\bneed\b.{1,25}\b(podcast|interview)\b|"
     r"\bwhen (are|will) you\b|\bwould love (it )?if you\b|\bwould be cool to see\b|\bhope to see you (collab|interview)\w*|"
+    r"\bhope (you|that you|you'll|you will|you can|you could)\b.{0,12}\b(interview|bring|invite|host)\b|"
+    r"\bhope\b.{0,30}\b(share|do|make|have)\b.{0,12}\b(an?|another|the next) (episode|podcast|video)\b.{0,15}\bwith\b|"
+    r"\b(hope|wish|want|love|would love|wanna|dream)\b.{0,25}\bsee\b.{0,40}\bnext (podcast|guest)\b|"
     r"\binterview with\b|\byou should (have|bring|invite|interview|get)\b|\bguesting\b|\bwaiting for\b.{1,30}\bon your\b|"
     r"\b(love|like|want|wish|hope|would|wanna|dream)\b.{0,20}\b(see|watch|hear)\b.{0,15}\byou\b.{0,15}\binterview\w*|"
     r"\bfuture guests?\b.{0,40}\b(would|should|could|suggest\w*|idea|love|see|have)\b|^\W*podcast with (?!(great|amazing|such|so|the|all|these|many|good|incredible|wonderful|awesome|best|inspiring|a|an|your|her|his)\b)[a-z]|"
@@ -168,7 +171,7 @@ REACT_RX = re.compile(
 
 # Bump this whenever a rule, word list or alias logic below changes in a way that can change a tag. It is stored with
 # every comment so you can tell which rules produced each tag (older comments whose text is purged keep their old version).
-RULES_VERSION = "2026-10-13.1"
+RULES_VERSION = "2026-10-15.1"
 
 CATEGORIES = ["Maria", "Guest", "Both", "Work", "Show", "Request", "Pair", "Unnamed", "Host", "Reaction", "Topic", "Noise", "Neither"]
 
@@ -275,6 +278,7 @@ def keywords(df, top=10, min_count=3):
 _CAP = "A-Z\u00c0-\u00de\u0410-\u042f\u0401"
 CAP_RUN = re.compile(rf"(?<![\w'])[{_CAP}][\w'\u2019\-]*(?: [{_CAP}][\w'\u2019\-]*){{0,3}}")
 LOWER_ASK = re.compile(r"\b(?:invite|have|bring|get|interview|host)\s+(?:the\s+)?([a-z][a-z'\-]+(?:\s[a-z][a-z'\-]+){0,2}?)\s+(?:on|to|for|next|in|as)\b")
+LOWER_ASK2 = re.compile(r"\b(?:see with|see|with|have|bring|invite|interview|host|get|hear from|watch)\s+(?:the\s+)?([a-z][a-z'\-]+\s[a-z][a-z'\-]+(?:\s[a-z][a-z'\-]+)??)\s+(?:on|to|for|next|in|as|podcast|episode|soon|please|join|here)\b")
 NAME_STOP = set("""
 please can could would will hope hey hi hello love loved i im i'm you your we the this that next maybe pretty tough maria masha sharapova
 youtube podcast show episode guest interview invite have bring get when why how what who it its thank thanks yes wow omg her she he his
@@ -325,8 +329,8 @@ PRONOUNS = set("her him them someone anyone somebody everyone more others".split
 def _name_key(name):
     toks = []
     for t in re.findall(r"[^\W\d_]+", _strip(re.sub(r"['\u2019]s\b", "", name))):
-        if re.search("[\u0400-\u04ff]", t) and len(t) >= 4 and t[-1] in "\u0443\u044e\u044b\u0438\u0435\u0430":
-            t = t[:-1]                                         # crude stem: Опра / Опру / Опры -> опр
+        if re.search("[\u0400-\u04ff]", t) and len(t) >= 4:
+            t = re.sub("(\u043e\u0439|\u043e\u0438|[\u0443\u044e\u044b\u0438\u0435\u0430\u044f\u043e])$", "", t)   # crude stem of a case ending: Опра / Опру / Опры -> опр; Дарья / Дарью -> дарь; Сафина / Сафиной -> сафин
         toks.append(t)
     return " ".join(toks)
 
@@ -383,6 +387,13 @@ def _names_in(text, skip, common=frozenset(), weak=None):
                 weak.append(toks[0])
             continue
         found.append(" ".join(toks))
+    if not found and text != text.lower():                  # mixed case but no capitalised name: "Hope to see with karlie kloss next podcast"
+        m = LOWER_ASK2.search(_strip(text))
+        if m:
+            toks = m.group(1).split()
+            if (2 <= len(toks) <= 3 and all(len(t) >= 3 and t not in NAME_STOP and t not in PRONOUNS and t not in skip and _strip(t) not in common
+                                            for t in toks)):
+                found.append(" ".join(w.capitalize() for w in toks))
     if not found and text == text.lower():
         m = LOWER_ASK.search(_strip(text))
         if m:
@@ -490,11 +501,15 @@ def is_junk_name(name, blocked=None):
 
 def clean_requested(j):
     """Copy of a stored requested-guests dict without its junk names (so old episodes are cleaned too, whatever rules were in force
-    when they were ingested). 'total' and 'named' are left as stored."""
+    when they were ingested). 'total' is left as stored; 'named' is capped at the number of name mentions that remain."""
     if not isinstance(j, dict):
         return j
     blocked = name_blocklist()
-    return {**j, "names": [x for x in j.get("names", []) if not is_junk_name(x["name"], blocked)]}
+    names = [x for x in j.get("names", []) if not is_junk_name(x["name"], blocked)]
+    out = {**j, "names": names}
+    if isinstance(j.get("named"), (int, float)) and len(j.get("names", [])) < 15:
+        out["named"] = int(min(j["named"], sum(x["n"] for x in names)))   # comments whose only "names" were junk no longer count as naming someone
+    return out
 
 
 # --- Address vs discussion (Maria / Guest / Both comments) ---------------------------------------------------------------
