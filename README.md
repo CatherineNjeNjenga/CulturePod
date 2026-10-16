@@ -266,6 +266,18 @@ A single first name such as "Iga" is kept as it is; add a row to `name_aliases.c
 In the reading pack, every comment tagged Request now ends with "names read: ...", the name(s) the rules took from it (or "none").
 Use it to see at once which requests the chart counted and which it missed.
 
+In the tone chart a person's bar is drawn only when at least 10 comments name only that person (`TONE_MIN` in `episode_report.py`).
+Below that the chart shows a dashed box saying "Too few comments to show" instead of percentages, and the report text adds a sentence
+saying which bar was left out and why. The views-and-likes line stays in the text of the report and is not printed on the images.
+
+### Activity at a glance and draft sentences
+Each report has an "Activity at a glance" table: comments, different commenters and likes per 1,000 views, the share of comments that
+drew a reply, and the share posted in the first 24 hours, each against the average of the earlier episodes ("above", "about the same
+as" within 10%, or "below"). The per-1,000-views rows need views read within 10 days of upload (so older episodes lack them); the
+rest work for every episode. A row's comparison appears once 3 earlier episodes have the measure. Next to the report the script writes
+`<date>_<guest>_sentences.md` with ready-to-edit sentences for Substack and a short LinkedIn line built from the same numbers. It is a
+separate file on purpose, so it is never pasted into a post by accident. New column in `episode_summary.csv`: `commenters_per_1k_views`.
+
 ### Square versions for LinkedIn
 `episode_report.py` also writes a 1080 x 1080 version of each chart next to the originals (`..._linkedin.png`, `..._tone_linkedin.png`,
 `..._requests_linkedin.png`): same data and colours, text wrapped for a square frame. The source line stays on the image. Use
