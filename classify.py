@@ -25,7 +25,7 @@ import unicodedata
 
 import numpy as np
 
-BUILD = "2026-10-15.5"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-16.1"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 
 
 def _strip(t):
