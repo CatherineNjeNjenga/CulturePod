@@ -8,7 +8,7 @@ import os
 import sqlite3
 import requests
 
-BUILD = "2026-10-15.5"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-16.1"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 
 SCHEMA = [
     """CREATE TABLE IF NOT EXISTS episodes (
