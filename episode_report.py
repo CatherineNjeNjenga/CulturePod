@@ -130,9 +130,22 @@ def draw_chart(e, i, path, sq=False):
     plt.close(fig)
     return True
 
+TONE_MIN = 10       # a person's tone bar is drawn only when at least this many comments name only them
+
+
 def tone_ok(r):
     return all(c in r and pd.notna(r[c]) for c in ("tone_maria_pos", "tone_maria_neg", "tone_guest_pos", "tone_guest_neg")) and \
-        max(r.get("tone_maria_n") or 0, r.get("tone_guest_n") or 0) >= 10
+        max(r.get("tone_maria_n") or 0, r.get("tone_guest_n") or 0) >= TONE_MIN
+
+
+def tone_hidden(r):
+    """Names of the groups whose tone bar is left out for having fewer than TONE_MIN comments: [] , ['Maria'] or [first name]."""
+    out = []
+    if (r.get("tone_maria_n") or 0) < TONE_MIN:
+        out.append("Maria")
+    if (r.get("tone_guest_n") or 0) < TONE_MIN:
+        out.append(first_name(r.get("guest")))
+    return out
 
 
 def draw_tone(e, i, path, sq=False):
@@ -152,12 +165,20 @@ def draw_tone(e, i, path, sq=False):
     ns = [int(r["tone_maria_n"]), int(r["tone_guest_n"])]
     fig, ax = plt.subplots(figsize=(SQ, SQ) if sq else (7, 5.4), dpi=180 if sq else 200, facecolor="white")
     if sq:
-        fig.subplots_adjust(left=0.14, right=0.95, top=0.72, bottom=0.17)
+        fig.subplots_adjust(left=0.14, right=0.95, top=0.69, bottom=0.17)
     else:
         fig.subplots_adjust(left=0.13, right=0.95, top=0.78, bottom=0.17)
-    top = max(max(pos), 10)
-    low = max(max(neg), 5)
+    shown = [nn >= TONE_MIN for nn in ns]
+    top = max(max([p_ for p_, ok in zip(pos, shown) if ok]), 10)
+    low = max(max([n_ for n_, ok in zip(neg, shown) if ok]), 5)
     for x, p_, n_, c, nn in zip((0, 1), pos, neg, (COL["maria"], COL["guest"]), ns):
+        if nn < TONE_MIN:                       # too few comments: no bar and no percentages, only a dashed box that says why
+            from matplotlib.patches import Rectangle
+            ax.add_patch(Rectangle((x - 0.28, -low * 1.3), 0.56, top * 0.95 + low * 1.3, fill=False, ls=(0, (4, 3)), ec="#9a9aa2", lw=1.2))
+            ax.text(x, top * 0.5, "Too few\ncomments\nto show", ha="center", va="center", fontsize=11, color=mut, linespacing=1.4)
+            who = "Maria" if x == 0 else first_name(r["guest"])
+            ax.text(x, -low * 0.25, f"only {nn} comment{'s' if nn != 1 else ''}\nnamed {who} alone", ha="center", va="top", fontsize=8.5, color=mut, linespacing=1.3)
+            continue
         ax.bar(x, p_, color=c, width=0.55)
         ax.bar(x, -n_, color=c, alpha=0.55, width=0.55)
         ax.text(x, p_ + top * 0.03, f"{p_:.0f}%", ha="center", fontsize=12, fontweight="bold", color=ink)
@@ -180,12 +201,12 @@ def draw_tone(e, i, path, sq=False):
     if sq:
         fig.text(0.05, 0.96, wrap(f"How the comments felt: {r['guest']} episode", 36), fontsize=14, fontweight="bold", color=ink, va="top", linespacing=1.25)
         fig.text(0.05, 0.835, wrap("Share of comments naming only that person that read positive (up) or negative (down). "
-                                   "Neutral comments are not drawn, so up + down is less than 100%.", 62), fontsize=9, color=mut, va="top")
+                                   "Neutral comments are not drawn, so up + down is less than 100%. A person's bar needs at least 10 comments.", 62), fontsize=9, color=mut, va="top")
         fig.text(0.05, 0.03, SRC, fontsize=7.2, color=mut)
     else:
         fig.text(0.04, 0.93, f"How the comments felt: {r['guest']} episode", fontsize=13, fontweight="bold", color=ink)
         fig.text(0.04, 0.875, "Share of comments naming only that person that read positive (up) or negative (down).", fontsize=8.5, color=mut)
-        fig.text(0.04, 0.835, "Neutral comments are not drawn, so up + down is less than 100%.", fontsize=8.5, color=mut)
+        fig.text(0.04, 0.835, "Neutral comments are not drawn, so up + down is less than 100%. A person's bar needs at least 10 comments.", fontsize=8.5, color=mut)
         fig.text(0.04, 0.03, SRC, fontsize=7, color=mut)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
@@ -194,6 +215,104 @@ def draw_tone(e, i, path, sq=False):
 
 MIN_EARLIER = 3        # earlier comparable episodes needed before the likes line is written
 SAME_BAND = 0.10       # within 10% of the earlier average counts as "about the same"
+
+# (column, label, how it is written, is it a percentage share, needs comparable views)
+ACTIVITY = [
+    ("comments_per_1k_views", "Comments per 1,000 views", False, True),
+    ("commenters_per_1k_views", "Different commenters per 1,000 views", False, True),
+    ("likes_per_1k_views", "Likes per 1,000 views", False, True),
+    ("reply_share", "Comments that drew a reply", True, False),
+    ("first_day_share", "Comments posted in the first 24 hours", True, False),
+]
+
+
+def _fmt(v, share):
+    if share:
+        return f"{float(v) * 100:.0f}%"
+    return f"{float(v):.0f}" if float(v) >= 10 else f"{float(v):.1f}"
+
+
+def activity(e, i):
+    """[(column, label, this value, earlier average or None, number of earlier episodes, word)] for the measures that exist.
+    The word is 'above', 'about the same as' or 'below' the earlier average (within SAME_BAND = about the same); it is left empty
+    when fewer than MIN_EARLIER earlier episodes have the measure."""
+    r = e.iloc[i]
+    out = []
+    for col, label, share, _ in ACTIVITY:
+        if col not in e or pd.isna(r.get(col)):
+            continue
+        prev = e[(e["published"] < r["published"]) & e[col].notna()]
+        if len(prev) >= MIN_EARLIER and float(prev[col].mean()) > 0:
+            avg = float(prev[col].mean())
+            rel = (float(r[col]) - avg) / avg
+            word = "about the same as" if abs(rel) <= SAME_BAND else "above" if rel > 0 else "below"
+            out.append((col, label, float(r[col]), avg, len(prev), word, share))
+        else:
+            out.append((col, label, float(r[col]), None, len(prev), "", share))
+    return out
+
+
+def activity_block(e, i):
+    """Markdown: a small table, 'Activity at a glance', this episode against the earlier average. '' when nothing is available."""
+    rows = activity(e, i)
+    if not rows:
+        return ""
+    L = ["## Activity at a glance", "| Measure | This episode | Earlier episodes (average) |", "|---|---|---|"]
+    for col, label, v, avg, k, word, share in rows:
+        L.append(f"| {label} | {_fmt(v, share)} | " + (f"{_fmt(avg, share)} ({k} episodes)" if avg is not None else "not enough earlier episodes yet") + " |")
+    L.append("")
+    L.append("*These count people who commented or liked, not everyone who watched; silent viewers are in the views. Per-1,000-views rows appear "
+             "only when the views were read soon after upload, so they are fair to compare.*\n")
+    return "\n".join(L)
+
+
+def draft_sentences(e, i):
+    """Markdown: ready-to-edit sentences for Substack and LinkedIn built from this episode's numbers."""
+    r = e.iloc[i]
+    F = first_name(r["guest"])
+    rows = {x[0]: x for x in activity(e, i)}
+
+    def tail(col, unit_phrase, avg_phrase="the {avg} average for the {k} earlier episodes"):
+        if col not in rows:
+            return None
+        _, _, v, avg, k, word, share = rows[col]
+        base = unit_phrase.format(v=_fmt(v, share))
+        if avg is None:
+            return base + "."
+        return base + f", {word} " + avg_phrase.format(avg=_fmt(avg, share), k=k) + "."
+
+    S = []
+    s1 = tail("comments_per_1k_views", f"The {F} episode drew {{v}} comments for every 1,000 views")
+    s2 = tail("commenters_per_1k_views", "{v} different people commented for every 1,000 views", "the earlier average of {avg}")
+    s3 = tail("likes_per_1k_views", "It earned {v} likes for every 1,000 views")
+    s4 = None
+    if "reply_share" in rows:
+        _, _, v, avg, k, word, share = rows["reply_share"]
+        s4 = f"{_fmt(v, True)} of comments drew a reply"
+        if avg is not None:
+            more = {"above": "more conversations than usual", "below": "fewer conversations than usual"}.get(word, "about as many conversations as usual")
+            s4 += f" (the earlier average is {_fmt(avg, True)}), so the episode started {more}."
+        else:
+            s4 += "."
+    s5 = None
+    if "first_day_share" in rows:
+        _, _, v, avg, k, word, share = rows["first_day_share"]
+        s5 = f"{_fmt(v, True)} of the comments arrived within the first 24 hours" + (f", {word} the usual {_fmt(avg, True)}." if avg is not None else ".")
+    S = [x for x in (s1, s2, s3, s4, s5) if x]
+    L = [f"# Draft sentences: {r['guest']} episode (not for publishing as it is; edit and copy what you want)", ""]
+    L.append("**Substack** (pick the ones that fit; each stands alone)")
+    L += [f"- {x}" for x in S] or ["- (no activity numbers are available for this episode yet)"]
+    L.append("")
+    li = f"In the first 7 days of comments on the {F} episode, {pct(r['maria_share_all'])} named Maria and {pct(r['guest_share_all'])} named {F}."
+    if pd.notna(r.get("maria_address_share")):
+        li += f" Much of the Maria talk was thanks addressed to her ({pct(r['maria_address_share'])} of those comments speak to her)."
+    pick = next((x for x in (s3, s1, s2) if x), None)
+    L.append("**LinkedIn** (short)")
+    L.append(f"- {li}" + (f" {pick}" if pick else ""))
+    L.append("")
+    L.append("*Say \"among people who commented\", not \"viewers think\": the numbers cover the people who spoke up. One episode is one data "
+             "point, so write \"so far\" rather than \"always\".*\n")
+    return "\n".join(L)
 
 
 def reception_line(e, i):
@@ -245,6 +364,16 @@ def request_rows(e, i, table, top=8):
     return [x for x in rows if x[1] + x[2] > 0]
 
 
+def requests_note(r):
+    """'6 comments asked for a guest; 3 of them named someone.' (the chart counts names, so it can show fewer than the comments asking)."""
+    t, n = r.get("requests_total"), r.get("requests_naming_someone")
+    if pd.isna(t) or pd.isna(n) or int(t) == 0:
+        return ""
+    t, n = int(t), int(n)
+    return (f"{t} comment{'s' if t != 1 else ''} under the {first_name(r['guest'])} episode asked for a guest; "
+            f"{n} of them named someone, the rest asked in general terms or named no one we could read.")
+
+
 def draw_requests(e, i, path, table=None, sq=False):
     """PNG for Substack: guests viewers asked for, all-time total per name (bar), with this episode's part highlighted."""
     r = e.iloc[i]
@@ -294,11 +423,10 @@ def draw_requests(e, i, path, table=None, sq=False):
              f"Dark part = comments under the {r['guest']} episode; light part = earlier counted episodes. ")
     if sq:
         fig.text(0.05, 0.96, "Guests viewers ask for", fontsize=14, fontweight="bold", color=ink, va="top")
-        fig.text(0.05, 0.885, wrap(first + "\nNames are read by simple rules, so counts are approximate.", 66), fontsize=8.5, color=mut, va="top")
+        fig.text(0.05, 0.885, wrap("\n".join(x for x in (first.strip(), requests_note(r), "Names are read by simple rules, so counts are approximate.") if x), 66), fontsize=8.5, color=mut, va="top")
         fig.text(0.05, 0.03, SRC, fontsize=7.2, color=mut)
     else:
-        fig.text(0.04, 1 - 0.58 / h, first +
-                 "\nNames are read by simple rules, so counts are approximate.", fontsize=7.5, color=mut, va="top")
+        fig.text(0.04, 1 - 0.58 / h, "\n".join(x for x in (first.strip(), requests_note(r), "Names are read by simple rules, so counts are approximate.") if x), fontsize=7.5, color=mut, va="top")
         fig.text(0.04, 0.2 / h, SRC, fontsize=7, color=mut)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
@@ -354,10 +482,19 @@ def report(e, i, info, image=None, req_image=None, tone_image=None):
         L.append(f"![Positive and negative comments in the {r['guest']} episode]({tone_image})\n")
         L.append("*Tone is an automatic score (VADER), not a reading of each comment: it misses sarcasm and context. Much of the positive "
                  "tone toward Maria is thanks addressed to her, so read it as warmth, not as who is more interesting.*\n")
+        hid = tone_hidden(r)
+        if hid:
+            cnt = {"Maria": int(r.get("tone_maria_n") or 0)}
+            cnt[first_name(r["guest"])] = int(r.get("tone_guest_n") or 0)
+            L.append("*" + " and ".join(f"{h}'s bar is left out: only {cnt[h]} comment{'s' if cnt[h] != 1 else ''} named only {h}" for h in hid)
+                     + f"; a percentage from fewer than {TONE_MIN} comments would say too little.*\n")
     rec = reception_line(e, i)
     if rec:
         L.append("## How the whole episode was received")
         L.append(rec + "\n")
+    ab = activity_block(e, i)
+    if ab:
+        L.append(ab)
     kw = str(r.get("keywords") or "").strip()
     if kw and kw.lower() != "nan":
         L.append(f"**Words that stood out in this episode's comments:** {kw}\n")
@@ -367,6 +504,9 @@ def report(e, i, info, image=None, req_image=None, tone_image=None):
         L.append("## Who viewers want next")
         if req_image:
             L.append(f"![Guests viewers asked for after the {r['guest']} episode]({req_image})\n")
+        note = requests_note(r)
+        if note:
+            L.append(f"*{note}*\n")
         if has_rq:
             L.append(f"**Guests viewers asked for:** {rq}\n")
         else:
@@ -428,6 +568,9 @@ def main():
             path = base + ".md"
             open(path, "w", encoding="utf-8").write(md)
             print("Wrote", path)
+        with open(base + "_sentences.md", "w", encoding="utf-8") as f:       # separate file, so it is never pasted by accident with the report
+            f.write(draft_sentences(e, i))
+        print("Wrote", base + "_sentences.md")
         if a.formats in ("linkedin", "both"):
             ok = [draw_chart(e, i, base + "_linkedin.png", sq=True),
                   draw_tone(e, i, base + "_tone_linkedin.png", sq=True),
