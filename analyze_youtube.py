@@ -28,7 +28,7 @@ import pandas as pd
 import nltk
 import classify
 
-BUILD = "2026-10-15.5"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
+BUILD = "2026-10-16.1"   # bumped with every release; run_weekly.py checks that all the files below carry the same value
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -108,6 +108,7 @@ def _engagement(d, mar, gst):
     out.update(video_likes=vl, likes_per_1k_views=vl / views * 1000 if ok and pd.notna(vl) else np.nan)   # same snapshot rule as the other per-1,000-views measures
     au = pd.to_numeric(_col(d, "authors"), errors="coerce").iloc[0]
     out.update(distinct_commenters=au, comments_per_commenter=n / au if pd.notna(au) and au > 0 else np.nan)
+    out["commenters_per_1k_views"] = au / views * 1000 if ok and pd.notna(au) else np.nan   # different people who commented, per 1,000 views
     sc, w, rp = _col(d, "script"), pd.to_numeric(_col(d, "words"), errors="coerce"), pd.to_numeric(_col(d, "replies"), errors="coerce")
     out.update(share_cyrillic=(sc == "cyrillic").mean() if sc.notna().any() else np.nan,
                median_words=w.median(), long_share=(w >= 30).mean() if w.notna().any() else np.nan,
