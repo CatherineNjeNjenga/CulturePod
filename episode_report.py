@@ -160,6 +160,7 @@ def draw_tone(e, i, path, sq=False):
     except ImportError:
         return False
     ink, mut = "#1d1d1f", "#5f5f66"
+    g = str(r['guest'])
     pos = [r["tone_maria_pos"] * 100, r["tone_guest_pos"] * 100]
     neg = [r["tone_maria_neg"] * 100, r["tone_guest_neg"] * 100]
     ns = [int(r["tone_maria_n"]), int(r["tone_guest_n"])]
@@ -185,7 +186,7 @@ def draw_tone(e, i, path, sq=False):
         ax.text(x, -n_ - top * 0.03, f"{n_:.0f}%", ha="center", va="top", fontsize=12, fontweight="bold", color=ink)
     ax.axhline(0, color=ink, lw=1)
     ax.set_xticks([0, 1])
-    ax.set_xticklabels([f"Maria\n({ns[0]} comments)", f"{str(r['guest'])[:26]}\n({ns[1]} comments)"], fontsize=10, color=ink)
+    ax.set_xticklabels([f"Maria\n({ns[0]} comments)", f"{(g if len(g) <= 26 else g[:25].rstrip() + '…')}\n({ns[1]} comments)"], fontsize=10, color=ink)
     ax.set_xlim(-0.6, 1.6)
     ax.set_ylim(-(low * 1.5 + top * 0.12), top * 1.18)
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{abs(v):.0f}%"))
@@ -200,13 +201,13 @@ def draw_tone(e, i, path, sq=False):
     ax.text(1.58, -(low * 1.5 + top * 0.08), "\u25BC negative", ha="right", fontsize=9, color=mut)
     if sq:
         fig.text(0.05, 0.96, wrap(f"How the comments felt: {r['guest']} episode", 36), fontsize=14, fontweight="bold", color=ink, va="top", linespacing=1.25)
-        fig.text(0.05, 0.835, wrap("Share of comments naming only that person that read positive (up) or negative (down). "
-                                   "Neutral comments are not drawn, so up + down is less than 100%. A person's bar needs at least 10 comments.", 62), fontsize=9, color=mut, va="top")
+        fig.text(0.05, 0.835, wrap("Share of comments naming only that person: positive (up), negative (down). "
+                                   "Neutral is not drawn. A bar needs at least 10 comments.", 62), fontsize=9, color=mut, va="top")
         fig.text(0.05, 0.03, SRC, fontsize=7.2, color=mut)
     else:
         fig.text(0.04, 0.93, f"How the comments felt: {r['guest']} episode", fontsize=13, fontweight="bold", color=ink)
-        fig.text(0.04, 0.875, "Share of comments naming only that person that read positive (up) or negative (down).", fontsize=8.5, color=mut)
-        fig.text(0.04, 0.835, "Neutral comments are not drawn, so up + down is less than 100%. A person's bar needs at least 10 comments.", fontsize=8.5, color=mut)
+        fig.text(0.04, 0.875, "Share of comments naming only that person: positive (up), negative (down).", fontsize=8.5, color=mut)
+        fig.text(0.04, 0.835, "Neutral is not drawn. A bar needs at least 10 comments.", fontsize=8.5, color=mut)
         fig.text(0.04, 0.03, SRC, fontsize=7, color=mut)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
@@ -374,6 +375,15 @@ def requests_note(r):
             f"{n} of them named someone, the rest asked in general terms or named no one we could read.")
 
 
+def requests_short(r):
+    """One short line for the chart itself; the full wording stays in the report text."""
+    t, n = r.get("requests_total"), r.get("requests_naming_someone")
+    if pd.isna(t) or pd.isna(n) or int(t) == 0:
+        return ""
+    t, n = int(t), int(n)
+    return f"{t} comment{'s' if t != 1 else ''} asked for a guest; {n} named someone."
+
+
 def draw_requests(e, i, path, table=None, sq=False):
     """PNG for Substack: guests viewers asked for, all-time total per name (bar), with this episode's part highlighted."""
     r = e.iloc[i]
@@ -403,7 +413,7 @@ def draw_requests(e, i, path, table=None, sq=False):
         lab = f"{a + b}" + (f"  ({a} this episode)" if a and b else "")
         ax.text(a + b + top * 0.015, y, lab, va="center", fontsize=9.5, color=ink, fontweight="bold")
     ax.set_yticks(ys)
-    ax.set_yticklabels([nm[:28] for nm, _, _ in rows], fontsize=9.5, color=ink)
+    ax.set_yticklabels([(nm if len(nm) <= 28 else nm[:27].rstrip() + "…") for nm, _, _ in rows], fontsize=9.5, color=ink)
     ax.set_xlim(0, top * 1.35)
     ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True, nbins=5))
     if sq and n < 5:                      # keep bars the same thickness as a full chart: leave the empty rows at the bottom
@@ -419,14 +429,15 @@ def draw_requests(e, i, path, table=None, sq=False):
     if not sq:
         fig.text(0.04, 1 - 0.38 / h, "Guests viewers ask for", fontsize=13, fontweight="bold", color=ink)
     none_new = not any(a for _, a, _ in rows)
-    first = (f"No guest was named under the {r['guest']} episode; the bars carry over the totals from earlier episodes." if none_new else
-             f"Dark part = comments under the {r['guest']} episode; light part = earlier counted episodes. ")
+    first = ("No guest was named this episode; bars show earlier totals." if none_new else
+             f"Dark = {first_name(r['guest'])} episode; light = earlier episodes.")
+    lines = [x for x in (first, requests_short(r), "Names read by simple rules, so counts are approximate.") if x]
     if sq:
         fig.text(0.05, 0.96, "Guests viewers ask for", fontsize=14, fontweight="bold", color=ink, va="top")
-        fig.text(0.05, 0.885, wrap("\n".join(x for x in (first.strip(), requests_note(r), "Names are read by simple rules, so counts are approximate.") if x), 66), fontsize=8.5, color=mut, va="top")
+        fig.text(0.05, 0.885, wrap("\n".join(lines), 66), fontsize=8.5, color=mut, va="top")
         fig.text(0.05, 0.03, SRC, fontsize=7.2, color=mut)
     else:
-        fig.text(0.04, 1 - 0.58 / h, "\n".join(x for x in (first.strip(), requests_note(r), "Names are read by simple rules, so counts are approximate.") if x), fontsize=7.5, color=mut, va="top")
+        fig.text(0.04, 1 - 0.58 / h, "\n".join(lines), fontsize=7.5, color=mut, va="top")
         fig.text(0.04, 0.2 / h, SRC, fontsize=7, color=mut)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
